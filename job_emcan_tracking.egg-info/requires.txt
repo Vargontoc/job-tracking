@@ -1,0 +1,7 @@
+fastapi
+httpx
+pdfplumber
+PyYAML
+pytest
+selectolax
+uvicorn

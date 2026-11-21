@@ -1,0 +1,196 @@
+# Origen: specs/api-pdf-parser (REQ-005, REQ-006, REQ-007, REQ-008)
+# Estado del contrato: contrastado con el código
+openapi: 3.1.0
+info:
+  title: Job Emcan Tracking API
+  version: 1.0.0
+  description: API para parsear los PDF de difusión de las comunidades configuradas.
+paths:
+  /parse:
+    get:
+      operationId: parsearOfertas
+      summary: Parsea los PDF de todas las comunidades configuradas
+      description: >-
+        Recorre el mapa interno de comunidades, descarga el PDF de difusión de
+        cada una, extrae sus ofertas y devuelve el resultado agregado. No
+        acepta parámetros, URL ni ficheros enviados por el cliente.
+      parameters: []
+      responses:
+        '200':
+          description: >-
+            Parseo agregado por comunidad. Los fallos de descarga o parseo de
+            una comunidad se incluyen en su resultado con estado error y no
+            cambian el código HTTP de la respuesta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespuestaParseo'
+              examples:
+                communitiesOk:
+                  summary: Comunidades procesadas correctamente
+                  value:
+                    metadatos:
+                      comunidades_procesadas: 1
+                      total_ofertas: 1
+                      timestamp: '2026-11-16T09:30:00+00:00'
+                    resultados:
+                      - comunidad: cantabria
+                        estado: ok
+                        ofertas:
+                          - denominacion: Cocinero/a
+                            municipio: Santander
+                            codigo_oferta: '062026003484'
+                            fecha_publicacion: 04/11/2026
+                            oficina: SANTANDER
+                            descripcion: Preparación de menús.
+                            sector_profesional:
+                              nombre: Hostelería
+                            comunidad: cantabria
+                communityError:
+                  summary: Fallo aislado de una comunidad
+                  value:
+                    metadatos:
+                      comunidades_procesadas: 2
+                      total_ofertas: 0
+                      timestamp: '2026-11-16T09:30:00+00:00'
+                    resultados:
+                      - comunidad: cantabria
+                        estado: error
+                        error: 'Error de descarga: HTTP 503.'
+                      - comunidad: asturias
+                        estado: ok
+                        ofertas: []
+        '422':
+          description: Error global de validación de la petición.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorHTTP'
+        '500':
+          description: >-
+            Error global de la API, por ejemplo, porque el mapa de comunidades
+            no existe o no es válido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorHTTP'
+components:
+  schemas:
+    RespuestaParseo:
+      type: object
+      required:
+        - metadatos
+        - resultados
+      properties:
+        metadatos:
+          $ref: '#/components/schemas/MetadatosParseo'
+        resultados:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResultadoComunidad'
+    MetadatosParseo:
+      type: object
+      required:
+        - comunidades_procesadas
+        - total_ofertas
+        - timestamp
+      properties:
+        comunidades_procesadas:
+          type: integer
+          minimum: 0
+          description: Número de resultados por comunidad incluidos en la respuesta.
+        total_ofertas:
+          type: integer
+          minimum: 0
+          description: Número total de ofertas de las comunidades con estado ok.
+        timestamp:
+          type: string
+          format: date-time
+          description: Momento de ensamblado de la respuesta en UTC.
+    ResultadoComunidad:
+      type: object
+      required:
+        - comunidad
+        - estado
+      properties:
+        comunidad:
+          type: string
+          description: Identificador de la comunidad procesada.
+        estado:
+          type: string
+          enum:
+            - ok
+            - error
+          description: Resultado del procesamiento de la comunidad.
+        ofertas:
+          type: array
+          description: Ofertas extraídas; presente cuando el estado es ok.
+          items:
+            $ref: '#/components/schemas/Oferta'
+        error:
+          type: string
+          description: Mensaje del fallo; presente cuando el estado es error.
+      oneOf:
+        - required:
+            - estado
+            - ofertas
+          properties:
+            estado:
+              const: ok
+        - required:
+            - estado
+            - error
+          properties:
+            estado:
+              const: error
+    Oferta:
+      type: object
+      required:
+        - denominacion
+        - municipio
+        - codigo_oferta
+        - fecha_publicacion
+        - oficina
+        - descripcion
+        - sector_profesional
+        - comunidad
+      properties:
+        denominacion:
+          type: string
+          description: Denominación del puesto.
+        municipio:
+          type: string
+          description: Municipio de la oferta.
+        codigo_oferta:
+          type: string
+          description: Código de oferta conservado como texto.
+        fecha_publicacion:
+          type: string
+          description: Fecha de publicación en formato dd/mm/aaaa.
+        oficina:
+          type: string
+          description: Oficina de empleo; puede estar vacía si no aparece en el PDF.
+        descripcion:
+          type: string
+          description: Descripción textual completa de la oferta.
+        sector_profesional:
+          $ref: '#/components/schemas/SectorProfesional'
+        comunidad:
+          type: string
+          description: Identificador de la comunidad de origen.
+    SectorProfesional:
+      type: object
+      required:
+        - nombre
+      properties:
+        nombre:
+          type: string
+          description: Nombre del sector profesional tal como aparece en el PDF.
+    ErrorHTTP:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+          description: Descripción del error global de la API.

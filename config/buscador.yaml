@@ -1,0 +1,60 @@
+# Contrato de configuración: rastreador del buscador HTML de Emplea Cantabria.
+#
+# Formato:
+# - La raíz debe ser un mapa YAML. Un YAML malformado, vacío o cuya raíz no
+#   sea un mapa se rechaza con un error controlado.
+# - Si el fichero no existe, la carga devuelve los valores por defecto.
+# - Todos los campos son opcionales: los que faltan toman su valor por
+#   defecto. Los campos ignorados se avisan, no son un error.
+#
+# Campos de la raíz:
+#   url_listado: URL base del listado paginado del buscador. El recorrido
+#     del listado le añade los parámetros de paginación del portlet:
+#     `?_..._delta=<tamano_pagina>&_..._cur=<n_pagina>` (1-based). Si la URL
+#     ya trae parámetros, se concatenan con `&`.
+#   url_ficha: URL base de las fichas de oferta. El parseo de la ficha pide
+#     `<url_ficha>/<codigo_oferta>`, con el código de 12 dígitos como texto.
+#   hora: hora de la pasada automática diaria, como un único entero entre
+#     0 y 23. No se admiten listas de horas, minutos, fracciones de hora ni
+#     expresiones cron. Un valor booleano tampoco se admite.
+#   user_agent: User-Agent identificable del proyecto (NFR-001). Debe
+#     contener el nombre del proyecto y una referencia de contacto (URL del
+#     repositorio o correo).
+#   delay: segundos mínimos entre peticiones consecutivas al portal
+#     (NFR-002). Compartido por el listado, las fichas y los reintentos.
+#   tamano_pagina: número de ofertas por página del listado (NFR-004).
+#   rutas: mapa con las rutas de los ficheros de estado.
+#   dias_purga: días de antigüedad a partir de los cuales se purgan los
+#     HTML de fichas fallidas (DEC-005).
+#
+# Submapa `rutas` (ambos opcionales):
+#   seen_codes: ruta del fichero JSON de códigos vistos. Es el único estado
+#     persistente de la feature (DEC-002).
+#   failed_htmls: ruta del directorio donde se guardan los HTML de las
+#     fichas fallidas, con el nombre `<codigo_oferta>_<yyyy-mm-dd>.html`.
+#
+# Valores por defecto (si el campo falta):
+#   hora = 1 (01:00), delay = 10, tamano_pagina = 75, dias_purga = 7.
+#   url_listado = "", url_ficha = "", user_agent = "", y las dos rutas de
+#   `rutas` = "".
+#
+# Validación de la hora (ALT-005):
+# - Se acepta un entero único dentro del rango 0-23, incluidos 0 y 23.
+# - Se rechaza con un error controlado cualquier otro valor: 24 o mayor,
+#   negativo, una lista, un texto con minutos ("01:30"), una fracción
+#   (1.5), una expresión cron ("0 1 * * *") o un booleano.
+# - Una hora inválida no deja la configuración en un estado inválido: el
+#   error se propaga y la carga se puede repetir con un fichero válido.
+# - Si la API arranca con una configuración inválida, conserva la hora
+#   anterior o, en el primer arranque, la por defecto 01:00.
+
+url_listado: "https://empleacantabria.es/ofertas-cantabria"
+url_ficha: "https://empleacantabria.es/ofertas-cantabria/-/oferta"
+hora: 1
+user_agent: "JobEmcanTracking/1.0 (+https://github.com/job-emcan-tracking; contacto@example.com)"
+delay: 10
+tamano_pagina: 75
+rutas:
+  seen_codes: "data/seen_codes.json"
+  failed_htmls: "data/failed_htmls"
+dias_purga: 7

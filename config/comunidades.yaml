@@ -1,0 +1,26 @@
+# Contrato de configuración: mapa interno comunidad => URL de PDF de difusión.
+#
+# Formato:
+# - La raíz debe ser un mapa YAML con la clave `comunidades`.
+# - `comunidades` debe ser una lista de entradas.
+# - Cada entrada debe ser un mapa con dos campos obligatorios y no vacíos:
+#   - `identador`: identificador único y estable de la comunidad.
+#   - `url_pdf`: URL del PDF de difusión que se descargará para la comunidad.
+# - Para dar de alta una comunidad nueva, añada una entrada a la lista con
+#   ambos campos. No requiere cambios de código.
+#
+# La carga rechaza con un error controlado un YAML malformado, una raíz que no
+# sea un mapa, una lista `comunidades` ausente o inválida y cualquier entrada
+# sin `identificador` o `url_pdf`.
+#
+# URLs del buscador HTML (listado y ficha): NO viven en este fichero. El
+# rastreador del buscador HTML usa su propio fichero de configuración,
+# `config/buscador.yaml`, con los campos `url_listado` y `url_ficha` (para
+# Cantabria: `https://empleacantabria.es/ofertas-cantabria` y
+# `https://empleacantabria.es/ofertas-cantabria/-/oferta`, de la que se pide
+# `<url_ficha>/<codigo_oferta>`). Este mapa solo cubre el parseo de los PDF
+# de difusión.
+comunidades:
+  - identificador: cantabria
+    url_pdf: https://www.sistemanacionalempleo.es/SNE_ListadoOfertasDifusionWEB/consultarOfertasFrm.do?idFlujo=CIEn95eSYhOdX3-G9dCy9Ux3044&modo=verPDF&filtroCA=06&CA=06
+

@@ -1,0 +1,8 @@
+.opencode
+.sdd
+.pytest_cache
+.venv
+
+__pycache__
+
+data/*

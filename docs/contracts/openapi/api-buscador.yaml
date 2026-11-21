@@ -1,0 +1,428 @@
+# Origen: specs/api-buscador (REQ-008, REQ-013, REQ-014, REQ-015, SUP-002, SUP-006, DEC-008, DEC-009)
+# Estado del contrato: contrastado con el código
+openapi: 3.1.0
+info:
+  title: Job Emcan Tracking API - Rastreador del buscador
+  version: 1.0.0
+  description: >-
+    API del rastreador del buscador HTML de Emplea Cantabria. Expone el
+    disparo manual de una pasada y la consulta del estado de la última
+    pasada. No exige autenticación (NFR-003). Convive con el endpoint
+    `GET /parse` documentado en `api-pdf-parser.yaml`.
+paths:
+  /buscador/run:
+    post:
+      operationId: pasadaManualBuscador
+      summary: Dispara una pasada manual del rastreador del buscador
+      description: >-
+        Ejecuta una pasada completa: recorre el listado paginado a 75 ofertas,
+        descarta los códigos ya vistos, pide la ficha de cada código nuevo y
+        devuelve el resultado estructurado de la pasada (REQ-013). El cuerpo
+        es opcional: si no se envía, o se envía sin `historical_codes`, el
+        filtrado de novedades usa el fichero local de códigos vistos
+        (`data/seen_codes.json`). Si se envía `historical_codes`, esa lista
+        es la que el endpoint recibe como referencia histórica de filtrado
+        (DEC-008).
+      tags:
+        - buscador
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudPasada'
+            examples:
+              sinCuerpo:
+                summary: Sin cuerpo
+                value: null
+              cuerpoVacio:
+                summary: Cuerpo vacío (se usa el fichero local de vistos)
+                value: {}
+              conHistoricos:
+                summary: Con lista explícita de códigos históricos
+                value:
+                  historical_codes:
+                    - '062026003484'
+                    - '062026003633'
+      responses:
+        '200':
+          description: >-
+            Resultado de la pasada. El código HTTP es siempre 200: un fallo
+            global del portal, un error por oferta o una omisión por
+            solapamiento se comunican dentro del cuerpo y no cambian el
+            código de respuesta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoPasada'
+              examples:
+                pasadaConOfertas:
+                  summary: Pasada con ofertas nuevas y un error por oferta
+                  value:
+                    timestamp: '2026-11-18T01:00:00'
+                    comunidad: Cantabria
+                    total_listado: 93
+                    error_global: ''
+                    errores_por_oferta:
+                      - codigo: '062026003484'
+                        mensaje: 'Error al parsear ficha 062026003484: ...'
+                    ofertas_nuevas:
+                      - numero_oferta: '062026003633'
+                        ocupacion: 'Cocinero/a'
+                        municipio: SANTANDER
+                        provincia: CANTABRIA
+                        fecha_inicio_difusion: '18/11/2026'
+                        fecha_fin_difusion: '03/12/2026'
+                        texto_libre: 'Preparación de menús.'
+                        contacto: 'contacto@example.com'
+                        comunidad: Cantabria
+                        sector: ''
+                        nivel: ''
+                        contrato: ''
+                errorGlobal:
+                  summary: Fallo global del portal (listado de ofertas vacío)
+                  value:
+                    timestamp: '2026-11-18T01:00:00'
+                    comunidad: Cantabria
+                    total_listado: 0
+                    error_global: >-
+                      Error HTTP al solicitar el listado (página 1): ...
+                    errores_por_oferta: []
+                    ofertas_nuevas: []
+                omisionPorSolapamiento:
+                  summary: Omisión por solapamiento (ya hay una pasada en curso)
+                  value:
+                    timestamp: '2026-11-18T01:00:00'
+                    comunidad: Cantabria
+                    total_listado: 0
+                    error_global: Ya hay una pasada en curso
+                    errores_por_oferta: []
+                    ofertas_nuevas: []
+        '422':
+          description: Error global de validación de la petición.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorHTTP'
+        '503':
+          description: >-
+            El coordinador del buscador no está disponible. La API arrancó
+            sin instancia de coordinador o todavía no lo ha registrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorHTTP'
+  /buscador/status:
+    get:
+      operationId: estadoBuscador
+      summary: Consulta el estado de la última pasada del buscador
+      description: >-
+        Devuelve si hay una pasada en curso, el progreso disponible de esa
+        pasada y el resumen de la última pasada finalizada. No acepta
+        parámetros ni cuerpo.
+      tags:
+        - buscador
+      responses:
+        '200':
+          description: >-
+            Estado del rastreador. Sin pasada en curso, `in_progress` es
+            `false` y `progreso` es `null`; con pasada en curso,
+            `in_progress` es `true` y `progreso` lleva la hora de inicio y
+            los códigos procesados sobre el total. `ultima_pasada` es `null`
+            mientras no haya ninguna pasada finalizada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadoBuscador'
+              examples:
+                sinPasadas:
+                  summary: Sin pasada en curso ni última pasada finalizada
+                  value:
+                    in_progress: false
+                    progreso: null
+                    ultima_pasada: null
+                conPasadaEnCurso:
+                  summary: Con una pasada en curso
+                  value:
+                    in_progress: true
+                    progreso:
+                      hora_inicio: '2026-11-18T01:00:00'
+                      codigos_procesados: 45
+                      total_codigos: 93
+                    ultima_pasada: null
+                conUltimaPasada:
+                  summary: Con la última pasada finalizada
+                  value:
+                    in_progress: false
+                    progreso: null
+                    ultima_pasada:
+                      timestamp: '2026-11-18T01:00:00'
+                      comunidad: Cantabria
+                      total_listado: 93
+                      error_global: ''
+                      errores_por_oferta:
+                        - codigo: '062026003484'
+                          mensaje: 'Error al parsear ficha 062026003484: ...'
+                      ofertas_nuevas:
+                        - numero_oferta: '062026003633'
+                          ocupacion: 'Cocinero/a'
+                          municipio: SANTANDER
+                          provincia: CANTABRIA
+                          fecha_inicio_difusion: '18/11/2026'
+                          fecha_fin_difusion: '03/12/2026'
+                          texto_libre: 'Preparación de menús.'
+                          contacto: 'contacto@example.com'
+                          comunidad: Cantabria
+                          sector: ''
+                          nivel: ''
+                          contrato: ''
+        '503':
+          description: El coordinador del buscador no está disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorHTTP'
+components:
+  schemas:
+    SolicitudPasada:
+      type: object
+      description: >-
+        Cuerpo opcional de la pasada manual. Si se omite el cuerpo o el
+        campo `historical_codes`, el filtrado de novedades usa el fichero
+        local `data/seen_codes.json`.
+      properties:
+        historical_codes:
+          type: array
+          description: >-
+            Lista explícita de códigos de oferta ya vistos, usada en lugar
+            del fichero local para filtrar las ofertas nuevas (DEC-008).
+            Los códigos se conservan como texto de 12 dígitos.
+          items:
+            type: string
+            pattern: '^[0-9]{12}$'
+          example:
+            - '062026003484'
+            - '062026003633'
+    ResultadoPasada:
+      type: object
+      description: >-
+        Resultado estructurado de una pasada (REQ-013). Es la misma
+        estructura en la respuesta del disparo manual y en el resumen de
+        la última pasada finalizada del endpoint de estado.
+      required:
+        - timestamp
+        - comunidad
+        - total_listado
+        - error_global
+        - errores_por_oferta
+        - ofertas_nuevas
+      properties:
+        timestamp:
+          type: string
+          description: >-
+            Marca de tiempo ISO del inicio de la pasada, con precisión de
+            segundos.
+          example: '2026-11-18T01:00:00'
+        comunidad:
+          type: string
+          description: >-
+            Comunidad rastreada. Esta feature se limita a Cantabria
+            (SUP-003).
+          default: Cantabria
+          example: Cantabria
+        total_listado:
+          type: integer
+          minimum: 0
+          description: >-
+            Total de ofertas declaradas por el portal en el listado. Con un
+            fallo global refleja el punto alcanzado en el recorrido.
+          example: 93
+        error_global:
+          type: string
+          description: >-
+            Error que impidió completar la pasada. Vacío si la pasada
+            terminó sin error global. Cuando hay error global, la lista de
+            ofertas nuevas va vacía. Con el valor `Ya hay una pasada en
+            curso` la respuesta es la de omisión por solapamiento.
+          example: ''
+        errores_por_oferta:
+          type: array
+          description: >-
+            Errores de las fichas que fallaron de forma persistente. El
+            código de una oferta con error no se marca como visto y se
+            volverá a solicitar en la siguiente pasada.
+          items:
+            $ref: '#/components/schemas/ErrorOferta'
+        ofertas_nuevas:
+          type: array
+          description: >-
+            Ofertas nuevas parseadas correctamente en esta pasada.
+          items:
+            $ref: '#/components/schemas/OfertaBuscador'
+    ErrorOferta:
+      type: object
+      description: Error ocurrido al procesar una oferta concreta.
+      required:
+        - codigo
+        - mensaje
+      properties:
+        codigo:
+          type: string
+          description: Código de oferta de 12 dígitos que provocó el error.
+          example: '062026003484'
+        mensaje:
+          type: string
+          description: Descripción del error.
+          example: 'Error al parsear ficha 062026003484: ...'
+    OfertaBuscador:
+      type: object
+      description: >-
+        Oferta extraída de la ficha del portal. Los ocho primeros campos
+        los publica la ficha; `sector`, `nivel` y `contrato` se mantienen en
+        el modelo pero se devuelven siempre vacíos porque la ficha no los
+        publica y no existe otra fuente (DEC-009, SUP-006).
+      required:
+        - numero_oferta
+        - ocupacion
+        - municipio
+        - provincia
+        - fecha_inicio_difusion
+        - fecha_fin_difusion
+        - texto_libre
+        - contacto
+        - comunidad
+        - sector
+        - nivel
+        - contrato
+      properties:
+        numero_oferta:
+          type: string
+          description: >-
+            Código de oferta de 12 dígitos conservado como texto, con los
+            ceros por delante.
+          example: '062026003633'
+        ocupacion:
+          type: string
+          description: Denominación del puesto publicada por la ficha.
+          example: Cocinero/a
+        municipio:
+          type: string
+          description: Municipio de la oferta, en mayúsculas.
+          example: SANTANDER
+        provincia:
+          type: string
+          description: Provincia de la oferta, en mayúsculas.
+          example: CANTABRIA
+        fecha_inicio_difusion:
+          type: string
+          description: Fecha de inicio de difusión en formato dd/mm/aaaa.
+          example: '18/11/2026'
+        fecha_fin_difusion:
+          type: string
+          description: Fecha de fin de difusión en formato dd/mm/aaaa.
+          example: '03/12/2026'
+        texto_libre:
+          type: string
+          description: >-
+            Texto libre de la oferta, con los espacios y saltos de línea
+            normalizados.
+          example: 'Preparación de menús.'
+        contacto:
+          type: string
+          description: >-
+            Información de contacto publicada por la ficha. Puede estar
+            vacía si la ficha no incluye el bloque de contacto.
+          example: 'contacto@example.com'
+        comunidad:
+          type: string
+          description: >-
+            Comunidad autónoma de la oferta. Viaja en el modelo para no
+            rehacer datos en el futuro, pero esta feature solo rastrea
+            Cantabria (SUP-003).
+          default: Cantabria
+          example: Cantabria
+        sector:
+          type: string
+          description: >-
+            Sector profesional. La ficha del portal no lo publica y no
+            hay otra fuente en el alcance, así que se devuelve siempre
+            vacío (DEC-009).
+          default: ''
+          example: ''
+        nivel:
+          type: string
+          description: >-
+            Nivel de estudios. La ficha del portal no lo publica y no hay
+            otra fuente en el alcance, así que se devuelve siempre vacío
+            (DEC-009).
+          default: ''
+          example: ''
+        contrato:
+          type: string
+          description: >-
+            Tipo de contrato. La ficha del portal no lo publica y no hay
+            otra fuente en el alcance, así que se devuelve siempre vacío
+            (DEC-009).
+          default: ''
+          example: ''
+    EstadoBuscador:
+      type: object
+      description: >-
+        Estado del rastreador: si hay una pasada en curso, el progreso
+        disponible y el resumen de la última pasada finalizada (REQ-015).
+      required:
+        - in_progress
+        - progreso
+        - ultima_pasada
+      properties:
+        in_progress:
+          type: boolean
+          description: Indica si hay una pasada en curso.
+          example: false
+        progreso:
+          description: >-
+            Progreso de la pasada en curso. `null` cuando no hay ninguna
+            pasada en curso.
+          oneOf:
+            - $ref: '#/components/schemas/ProgresoPasada'
+            - type: 'null'
+        ultima_pasada:
+          description: >-
+            Resumen de la última pasada finalizada. `null` mientras no
+            haya ninguna pasada finalizada.
+          oneOf:
+            - $ref: '#/components/schemas/ResultadoPasada'
+            - type: 'null'
+    ProgresoPasada:
+      type: object
+      description: Progreso de la pasada en curso.
+      required:
+        - hora_inicio
+        - codigos_procesados
+        - total_codigos
+      properties:
+        hora_inicio:
+          type: string
+          description: >-
+            Marca de tiempo ISO del inicio de la pasada, con precisión de
+            segundos.
+          example: '2026-11-18T01:00:00'
+        codigos_procesados:
+          type: integer
+          minimum: 0
+          description: Número de códigos de oferta ya procesados.
+          example: 45
+        total_codigos:
+          type: integer
+          minimum: 0
+          description: Total de códigos de oferta a procesar en la pasada.
+          example: 93
+    ErrorHTTP:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+          description: Descripción del error global de la API.
+          example: 'El coordinador del buscador no está disponible'

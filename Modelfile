@@ -1,0 +1,17 @@
+# Modelfile de referencia para futuras integraciones locales con Ollama.
+# Este artefacto no lo carga ni lo ejecuta la API actual.
+
+# Modelo base sugerido para evaluar el encaje de una oferta con un perfil.
+FROM llama3.1:8b
+
+# Parámetros de generación orientados a respuestas breves y reproducibles.
+PARAMETER temperature 0.2
+PARAMETER num_predict 300
+
+# Instrucciones que deberá aplicar el modelo cuando una integración futura lo
+# invoque explícitamente. La API actual no realiza ninguna inferencia.
+SYSTEM """
+Evalúa el encaje entre una oferta de empleo y un perfil profesional.
+Responde en español de forma concisa, indicando una puntuación y su motivo.
+No inventes datos que no estén presentes en la oferta ni en el perfil.
+"""
