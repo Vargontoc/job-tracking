@@ -26,7 +26,7 @@ La ingesta y la purga conviven en el mismo proceso FastAPI que el planificador d
 
 ## Tareas
 
-### [ ] TASK-001 Estructura del paquete de persistencia y dependencias
+### [x] TASK-001 Estructura del paquete de persistencia y dependencias
 
 - **Cubre:** NFR-001, NFR-005, DEC-001, DEC-002
 - **Componente:** api-persistencia | source/api/persistencia
@@ -41,7 +41,7 @@ La ingesta y la purga conviven en el mismo proceso FastAPI que el planificador d
 - **Prueba manual:**
   1. Instalar el proyecto en un entorno virtual limpio y ejecutar la suite de pruebas: termina sin fallos por dependencias ausentes.
 
-### [ ] TASK-002 Fichero de configuración de la persistencia
+### [x] TASK-002 Fichero de configuración de la persistencia
 
 - **Cubre:** REQ-011, REQ-018, NFR-001, SUP-001, SUP-015, DEC-001
 - **Componente:** config-persistencia | config/persistencia.yaml
@@ -59,7 +59,7 @@ La ingesta y la purga conviven en el mismo proceso FastAPI que el planificador d
   1. Abrir `config/persistencia.yaml` y comprobar que contiene los cinco campos con sus valores por defecto.
   2. Cambiar la cadencia de ingesta y la retención, recargar la configuración y comprobar que los nuevos valores son los que se aplican.
 
-### [ ] TASK-003 Conexión única a SQLite con WAL y pragmas
+### [x] TASK-003 Conexión única a SQLite con WAL y pragmas
 
 - **Cubre:** REQ-010, REQ-011, NFR-001, NFR-002, NFR-006, DEC-001, DEC-008, ALT-004, ALT-005
 - **Componente:** db-connection | source/api/persistencia/connection.py
@@ -77,7 +77,7 @@ La ingesta y la purga conviven en el mismo proceso FastAPI que el planificador d
 - **Prueba manual:**
   1. Arrancar la persistencia con la configuración por defecto y comprobar que aparece `data/job_emcan.db` y que solo hay un fichero de base de datos en el árbol del proyecto.
 
-### [ ] TASK-004 Migraciones secuenciales y esquema SQLite
+### [x] TASK-004 Migraciones secuenciales y esquema SQLite
 
 - **Cubre:** REQ-010, REQ-007, NFR-005, NFR-007, SUP-002, SUP-003, SUP-010, DEC-002, DEC-003, DEC-004, DEC-007, ALT-004
 - **Componente:** schema-migrator | source/api/persistencia/migrations.py
@@ -100,7 +100,7 @@ La ingesta y la purga conviven en el mismo proceso FastAPI que el planificador d
   1. Migrar una base de datos desde cero y revisar el esquema resultante con una herramienta de inspección de SQLite: tablas, columnas, índices y restricción única.
   2. Arrancar dos veces seguidas y comprobar que la segunda vez no se reejecuta ninguna migración.
 
-### [ ] TASK-005 Repositorio de ofertas: upsert y consulta por clave natural
+### [x] TASK-005 Repositorio de ofertas: upsert y consulta por clave natural
 
 - **Cubre:** REQ-001, REQ-002, REQ-003, REQ-004, REQ-007, REQ-008, NFR-003, NFR-004, NFR-005, NFR-007, SUP-002, SUP-006, SUP-007, SUP-011, DEC-002, DEC-003, DEC-008, ALT-005
 - **Componente:** ofertas-repository | source/api/persistencia/repository.py
@@ -124,7 +124,7 @@ La ingesta y la purga conviven en el mismo proceso FastAPI que el planificador d
 - **Prueba manual:**
   1. Persistir una oferta real con los campos que publica la ficha y consultarla: comprobar que los valores devueltos coinciden con los enviados y que los tres campos reservados vienen vacíos.
 
-### [ ] TASK-006 Listado por estado y lista de códigos vistos
+### [x] TASK-006 Listado por estado y lista de códigos vistos
 
 - **Cubre:** REQ-009, REQ-016, REQ-015, SUP-010, SUP-011, DEC-003, ALT-005
 - **Componente:** ofertas-repository | source/api/persistencia/repository.py
@@ -142,7 +142,7 @@ La ingesta y la purga conviven en el mismo proceso FastAPI que el planificador d
 - **Prueba manual:**
   1. Con ofertas vigentes, cerradas y sin ficha en la base de datos, listar las vigentes y comprobar que solo aparecen las vigentes con los campos mínimos exigidos.
 
-### [ ] TASK-007 Reducción a registro mínimo conservando el embedding
+### [x] TASK-007 Reducción a registro mínimo conservando el embedding
 
 - **Cubre:** REQ-005, REQ-006, NFR-005, SUP-004, SUP-006, DEC-002, DEC-007, ALT-006
 - **Componente:** ofertas-repository | source/api/persistencia/repository.py
@@ -160,7 +160,7 @@ La ingesta y la purga conviven en el mismo proceso FastAPI que el planificador d
 - **Prueba manual:**
   1. Reducir una oferta con embedding y consultar el registro: comprobar que no quedan texto ni contacto y que el embedding sigue disponible con sus metadatos.
 
-### [ ] TASK-008 Importador idempotente de `data/seen_codes.json`
+### [x] TASK-008 Importador idempotente de `data/seen_codes.json`
 
 - **Cubre:** REQ-013, REQ-014, REQ-015, REQ-018, NFR-003, SUP-011, SUP-013, DEC-006, ALT-003
 - **Componente:** seen-codes-importer | source/api/persistencia/importer.py
@@ -183,7 +183,7 @@ La ingesta y la purga conviven en el mismo proceso FastAPI que el planificador d
   1. Ejecutar la importación con el `data/seen_codes.json` real y comprobar que la base de datos contiene un registro por código, todos en estado `sin_ficha`.
   2. Comprobar que el `data/seen_codes.json` sigue con el mismo contenido y la misma fecha de modificación.
 
-### [ ] TASK-009 Cliente HTTP de `GET /buscador/status`
+### [x] TASK-009 Cliente HTTP de `GET /buscador/status`
 
 - **Cubre:** REQ-017, REQ-018, ALT-001, ALT-002, SUP-014
 - **Componente:** buscador-client | source/api/persistencia/client.py
@@ -202,7 +202,7 @@ La ingesta y la purga conviven en el mismo proceso FastAPI que el planificador d
 - **Prueba manual:**
   1. Con la aplicación arrancada, consultar el cliente contra `http://localhost:8000` y comprobar que devuelve el mismo `ultima_pasada` que muestra `GET /buscador/status`.
 
-### [ ] TASK-010 Tarea periódica de ingesta de ofertas completas
+### [x] TASK-010 Tarea periódica de ingesta de ofertas completas
 
 - **Cubre:** REQ-017, REQ-018, REQ-001, REQ-002, REQ-003, REQ-015, NFR-006, SUP-014, SUP-015, DEC-003, DEC-005, DEC-008, ALT-001, ALT-002
 - **Componente:** ingestion-task | source/api/persistencia/ingestion.py
@@ -226,7 +226,7 @@ La ingesta y la purga conviven en el mismo proceso FastAPI que el planificador d
   1. Arrancar la aplicación con una pasada real del buscador y comprobar en la base de datos que las ofertas nuevas de la última pasada están almacenadas con estado `vigente`.
   2. Reiniciar la aplicación y comprobar que la pasada ya importada no vuelve a importarse.
 
-### [ ] TASK-011 Tarea periódica de purga por retención
+### [x] TASK-011 Tarea periódica de purga por retención
 
 - **Cubre:** REQ-005, REQ-006, REQ-003, SUP-004, DEC-002, DEC-007, DEC-008, ALT-006
 - **Componente:** purge-task | source/api/persistencia/purge.py
@@ -245,7 +245,7 @@ La ingesta y la purga conviven en el mismo proceso FastAPI que el planificador d
 - **Prueba manual:**
   1. Cerrar una oferta, simular el paso del plazo de retención y ejecutar la purga: comprobar que desaparecen el texto y el contacto y que el embedding sigue disponible.
 
-### [ ] TASK-012 Endpoints de la API de persistencia
+### [x] TASK-012 Endpoints de la API de persistencia
 
 - **Cubre:** REQ-001, REQ-008, REQ-009, REQ-012, REQ-016, SUP-008, DEC-003
 - **Componente:** persistencia-api | source/api/persistencia/routes.py
@@ -266,7 +266,7 @@ La ingesta y la purga conviven en el mismo proceso FastAPI que el planificador d
   1. Crear una oferta desde el endpoint, consultarla y comprobar que devuelve todos los campos guardados.
   2. Consultar una oferta inexistente y comprobar que la respuesta indica que no se encontró.
 
-### [ ] TASK-013 Arranque y apagado de la persistencia en la aplicación
+### [X] TASK-013 Arranque y apagado de la persistencia en la aplicación
 
 - **Cubre:** REQ-010, REQ-011, REQ-013, REQ-017, REQ-018, NFR-001, NFR-002, SUP-001, SUP-015, DEC-001, DEC-004, DEC-005, DEC-006, DEC-008, ALT-003, ALT-004
 - **Componente:** api-service | source/api
@@ -288,7 +288,7 @@ La ingesta y la purga conviven en el mismo proceso FastAPI que el planificador d
   1. Arrancar la aplicación y comprobar que aparecen `data/job_emcan.db`, que la base de datos tiene las tablas esperadas y que la tarea de ingesta hace su primera consulta al buscador.
   2. Detener la aplicación y comprobar que no queda ninguna tarea de persistencia viva.
 
-### [ ] TASK-014 Verificación de integración de la persistencia
+### [X] TASK-014 Verificación de integración de la persistencia
 
 - **Cubre:** REQ-001, REQ-002, REQ-003, REQ-009, REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015, REQ-016, REQ-017, REQ-018, NFR-001, NFR-002, NFR-003, NFR-004, NFR-005, NFR-006, NFR-007, SUP-011, SUP-015, DEC-002, DEC-003, DEC-005, DEC-006, DEC-007, ALT-001, ALT-002, ALT-003, ALT-005, ALT-006
 - **Componente:** api-service | source/api
@@ -311,7 +311,7 @@ La ingesta y la purga conviven en el mismo proceso FastAPI que el planificador d
   1. Ejecutar la prueba de integración y revisar el informe: todos los escenarios salen con el resultado esperado.
   2. Revisar el directorio `data/` tras la prueba: solo existe el fichero SQLite único y el `seen_codes.json` sin cambios.
 
-### [ ] TASK-015 Contrato: openapi - operaciones de persistencia
+### [x] TASK-015 Contrato: openapi - operaciones de persistencia
 
 - **Cubre:** REQ-001, REQ-008, REQ-009, REQ-012, REQ-016, SUP-008, DEC-002, DEC-003
 - **Componente:** persistencia-api | source/api/persistencia/routes.py
@@ -329,7 +329,7 @@ La ingesta y la purga conviven en el mismo proceso FastAPI que el planificador d
   1. Revisar el contrato y comprobar que aparecen las cuatro interfaces de la fila de contratos afectados.
   2. Comparar el contrato con las respuestas JSON reales obtenidas en TASK-014 y confirmar que no hay campos divergentes.
 
-### [ ] TASK-016 Contrato: configuración - fichero de configuración de la persistencia
+### [x] TASK-016 Contrato: configuración - fichero de configuración de la persistencia
 
 - **Cubre:** REQ-011, REQ-018, NFR-001, SUP-001, SUP-015, DEC-001, DEC-005, DEC-006
 - **Componente:** config-persistencia | config/persistencia.yaml

@@ -26,6 +26,20 @@ from source.api.downloader import ErrorDescarga, descargar_pdf
 from source.api.models import ResultadoPorComunidad
 from source.api.parser import extraer_ofertas_desde_pdf
 
+# Persistencia (TASK-013)
+from source.api.persistencia.config import (
+    cargar_configuracion as cargar_configuracion_persistencia,
+    ErrorConfiguracion as ErrorConfiguracionPersistencia,
+)
+from source.api.persistencia.connection import abrir_conexion
+from source.api.persistencia.migrations import migrar, ErrorMigracion
+from source.api.persistencia.importer import importar_codigos_vistos
+from source.api.persistencia.repository import RepositorioOfertas
+from source.api.persistencia.client import ClienteBuscador
+from source.api.persistencia.ingestion import TareaIngesta
+from source.api.persistencia.purge import TareaPurga
+from source.api.persistencia.routes import router as persistencia_router
+
 logger = logging.getLogger(__name__)
 
 
@@ -47,6 +61,7 @@ async def lifespan(app: FastAPI):
     - Limpia recursos
     """
     # === STARTUP ===
+    # Parte 1: Buscador (existente)
     try:
         # 1. Cargar configuración del buscador
         config = cargar_configuracion()
@@ -90,26 +105,134 @@ async def lifespan(app: FastAPI):
         scheduler.iniciar()
         app_state["scheduler"] = scheduler
         
-        logger.info("API arrancada correctamente con coordinador real y scheduler iniciado")
-        
     except ErrorConfiguracionBuscador as e:
         logger.error(f"Error al cargar configuración del buscador: {e}")
         logger.info("Continuando con configuración por defecto")
         # Usar configuración por defecto
         from source.api.buscador.models import ConfigBuscador
-        app_state["config"] = ConfigBuscador()
+        config = ConfigBuscador()
+        app_state["config"] = config
         app_state["coordinador"] = None
         app_state["scheduler"] = None
     except Exception as e:
-        logger.error(f"Error inesperado al arrancar: {e}")
-        # No bloquear el arranque de la API
+        logger.error(f"Error inesperado al arrancar el buscador: {e}")
+        from source.api.buscador.models import ConfigBuscador
+        config = ConfigBuscador()
         app_state["config"] = None
         app_state["coordinador"] = None
         app_state["scheduler"] = None
+
+    # Parte 2: Persistencia (TASK-013) — independiente del buscador
+    try:
+        # 5.1 Cargar configuración de persistencia
+        config_persistencia = cargar_configuracion_persistencia()
+        logger.info(
+            "Configuración de persistencia cargada: ruta_bd=%s, cadencia=%ds",
+            config_persistencia.ruta_bd,
+            config_persistencia.cadencia_segundos,
+        )
+
+        # 5.2 Abrir conexión SQLite con WAL
+        conexion_persistencia = abrir_conexion(config_persistencia.ruta_bd)
+        logger.info(
+            "Conexión SQLite abierta: %s (WAL activado)",
+            config_persistencia.ruta_bd,
+        )
+
+        # 5.3 Aplicar migraciones
+        version_esquema = migrar(conexion_persistencia)
+        logger.info("Migraciones aplicadas: versión %d", version_esquema)
+
+        # 5.4 Importar códigos vistos (no bloquea si falla - ALT-003)
+        ruta_seen_codes_import = (
+            Path(config.ruta_seen_codes)
+            if getattr(config, "ruta_seen_codes", None)
+            else Path("data/seen_codes.json")
+        )
+        try:
+            resultado_importacion = importar_codigos_vistos(
+                conexion_persistencia, ruta_seen_codes_import
+            )
+            logger.info(
+                "Importación de códigos vistos: %d importados, %d existentes",
+                resultado_importacion.importados,
+                resultado_importacion.existentes,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Error importando códigos vistos desde %s: %s. Continuando.",
+                ruta_seen_codes_import,
+                exc,
+            )
+
+        # 5.5 Crear repositorio y cliente buscador
+        repositorio = RepositorioOfertas(conexion_persistencia)
+        cliente_buscador = ClienteBuscador(
+            url_base=config_persistencia.url_base_buscador
+        )
+
+        # 5.6 Arrancar TareaIngesta
+        tarea_ingesta = TareaIngesta(
+            cliente_buscador=cliente_buscador,
+            repositorio=repositorio,
+            conexion=conexion_persistencia,
+            cadencia_segundos=config_persistencia.cadencia_segundos,
+        )
+        tarea_ingesta.iniciar()
+        logger.info("Tarea de ingesta arrancada")
+
+        # 5.7 Arrancar TareaPurga
+        tarea_purga = TareaPurga(
+            repositorio=repositorio,
+            conexion=conexion_persistencia,
+            dias_retencion=config_persistencia.dias_retencion,
+            frecuencia_segundos=config_persistencia.frecuencia_segundos,
+        )
+        tarea_purga.iniciar()
+        logger.info("Tarea de purga arrancada")
+
+        # 5.8 Guardar referencias en app_state
+        app_state["config_persistencia"] = config_persistencia
+        app_state["conexion_persistencia"] = conexion_persistencia
+        app_state["repositorio"] = repositorio
+        app_state["cliente_buscador"] = cliente_buscador
+        app_state["tarea_ingesta"] = tarea_ingesta
+        app_state["tarea_purga"] = tarea_purga
+
+        logger.info("API arrancada correctamente con coordinador real y scheduler iniciado")
+
+    except (ErrorConfiguracionPersistencia, ErrorMigracion) as exc:
+        logger.error("Error crítico en persistencia: %s", exc)
+        raise
     
     yield
     
     # === SHUTDOWN ===
+    # 1. Detener tareas de persistencia PRIMERO (antes de cerrar conexión)
+    tarea_ingesta = app_state.get("tarea_ingesta")
+    if tarea_ingesta is not None:
+        try:
+            tarea_ingesta.detener()
+        except Exception as e:
+            logger.error(f"Error al detener tarea de ingesta: {e}")
+
+    tarea_purga = app_state.get("tarea_purga")
+    if tarea_purga is not None:
+        try:
+            tarea_purga.detener()
+        except Exception as e:
+            logger.error(f"Error al detener tarea de purga: {e}")
+
+    # 2. Cerrar conexión SQLite
+    conexion_persistencia = app_state.get("conexion_persistencia")
+    if conexion_persistencia is not None:
+        try:
+            conexion_persistencia.close()
+            logger.info("Conexión SQLite cerrada correctamente")
+        except Exception as e:
+            logger.error(f"Error al cerrar conexión SQLite: {e}")
+
+    # 3. Detener scheduler del buscador
     scheduler = app_state.get("scheduler")
     if scheduler is not None:
         try:
@@ -136,6 +259,9 @@ app = FastAPI(title="Job Emcan Tracking API", lifespan=lifespan)
 
 # Registrar rutas del buscador
 app.include_router(buscador_router)
+
+# Registrar rutas de persistencia (TASK-013)
+app.include_router(persistencia_router)
 
 
 @app.get("/health")

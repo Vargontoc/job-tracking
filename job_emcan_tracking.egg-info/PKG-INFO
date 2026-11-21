@@ -5,6 +5,7 @@ Summary: API local para el parseo de ofertas de empleo
 Requires-Python: >=3.12
 Requires-Dist: fastapi
 Requires-Dist: httpx
+Requires-Dist: numpy
 Requires-Dist: pdfplumber
 Requires-Dist: PyYAML
 Requires-Dist: pytest

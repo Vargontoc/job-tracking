@@ -1,0 +1,59 @@
+# Contrato de configuración: capa de persistencia SQLite de ofertas.
+#
+# Formato:
+# - La raíz debe ser un mapa YAML. Un YAML malformado, vacío o cuya raíz no
+#   sea un mapa se rechaza con un error controlado.
+# - Si el fichero no existe, la carga devuelve los valores por defecto.
+# - Los cuatro submapas son opcionales: un submapa ausente equivale a un
+#   submapa vacío, y sus campos toman entonces sus valores por defecto.
+# - Todos los campos son opcionales: los que faltan toman su valor por
+#   defecto.
+# - Un submapa presente con un valor que no sea un mapa se rechaza con un
+#   error controlado que identifica el submapa problemático.
+# - Un campo con un tipo incorrecto se rechaza con un error controlado que
+#   identifica el campo. Los campos enteros no admiten booleanos: `true` y
+#   `false` no son enteros válidos.
+#
+# Submapa `base_de_datos`:
+#   ruta: ruta al fichero SQLite único. Relativa a la raíz del proyecto. El
+#     directorio padre se crea si no existe. Por defecto: "data/job_emcan.db".
+#
+# Submapa `buscador`:
+#   url_base: URL base para consultar GET /buscador/status. El cliente le
+#     añade "/buscador/status". Por defecto: "http://localhost:8000".
+#
+# Submapa `ingesta`:
+#   cadencia_segundos: intervalo entre consultas al buscador (entero > 0).
+#     Por defecto: 300.
+#
+# Submapa `purga`:
+#   dias_retencion: días que se conservan texto y contacto tras el cierre
+#     (entero >= 0). Por defecto: 7.
+#   frecuencia_segundos: intervalo entre ejecuciones de la purga (entero > 0).
+#     Por defecto: 86400.
+#
+# Valores por defecto (si el campo o el submapa faltan):
+#   ruta = "data/job_emcan.db", url_base = "http://localhost:8000",
+#   cadencia_segundos = 300, dias_retencion = 7,
+#   frecuencia_segundos = 86400.
+#
+# Esta configuración NO contiene rutas de servidor de base de datos ni
+# credenciales (NFR-001). SQLite es un fichero local único con WAL.
+#
+# Consumidores: `source/api/persistencia/config.py` carga este fichero y
+# `source/api/main.py` aplica sus valores al arrancar la aplicación (ruta de
+# la base de datos, URL base del buscador, cadencia de la ingesta, días de
+# retención y frecuencia de la purga).
+
+base_de_datos:
+  ruta: "data/job_emcan.db"
+
+buscador:
+  url_base: "http://localhost:8000"
+
+ingesta:
+  cadencia_segundos: 300
+
+purga:
+  dias_retencion: 7
+  frecuencia_segundos: 86400

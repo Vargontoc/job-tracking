@@ -1,0 +1,683 @@
+# Origen: specs/api-persistencia (REQ-001, REQ-002, REQ-004, REQ-008, REQ-009, REQ-012, REQ-016, SUP-008, DEC-002, DEC-003)
+# Estado del contrato: contrastado con el código
+openapi: 3.1.0
+info:
+  title: Job Emcan Tracking API - Persistencia de ofertas
+  version: 1.0.0
+  description: >-
+    API de la capa de persistencia SQLite de ofertas. Expone al resto de
+    módulos las operaciones de lectura y escritura de ofertas para que no
+    tengan que conocer el esquema SQL subyacente (REQ-012). No exige
+    autenticación (SUP-008). Convive en el mismo proceso con los endpoints
+    del buscador (`api-buscador.yaml`) y del parseo de PDF
+    (`api-pdf-parser.yaml`).
+
+    Convenciones de datos:
+    - `codigo` es texto de 12 dígitos, con los ceros por delante, y nunca un
+      número (NFR-003).
+    - `fecha_inicio_difusion` y `fecha_fin_difusion` son fechas en formato
+      `dd/mm/aaaa` (NFR-004).
+    - La clave natural de una oferta es la pareja `(comunidad, codigo)`, que es
+      única en la base de datos (REQ-007). Las operaciones de escritura son
+      un *upsert*: nunca crean una fila duplicada (REQ-001).
+    - `sector`, `nivel` y `contrato` se conservan en el modelo pero se
+      almacenan y se devuelven siempre vacíos, porque la ficha del portal no
+      los publica y no hay otra fuente en el alcance (DEC-009).
+    - `embedding` se transporta como texto base64 (`string`, `format: byte`)
+      porque la API es JSON. En la base de datos es un BLOB con los bytes
+      contiguos del vector `float32`; `embedding_model_name`,
+      `embedding_model_version` y `embedding_dim` permiten reconstruirlo sin
+      ambigüedad (DEC-002).
+paths:
+  /persistencia/ofertas:
+    post:
+      operationId: crearOActualizarOferta
+      summary: Crear o actualizar una oferta
+      description: >-
+        Crea la oferta si no existe o actualiza sus campos modificables si ya
+        existe, identificada por la pareja `(comunidad, codigo)` (REQ-001).
+        No duplica la fila y registra la fecha y hora de última modificación
+        en cada escritura. Si la oferta no existe se crea con el `estado`
+        indicado o, en su defecto, con `vigente` (REQ-003).
+      tags:
+        - persistencia
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfertaEntrada'
+            examples:
+              ofertaCompleta:
+                summary: Oferta con ficha y embedding
+                value:
+                  comunidad: Cantabria
+                  provincia: CANTABRIA
+                  codigo: '062026003633'
+                  ocupacion: Cocinero/a
+                  municipio: SANTANDER
+                  sector: ''
+                  nivel: ''
+                  contrato: ''
+                  fecha_inicio_difusion: '18/11/2026'
+                  fecha_fin_difusion: '03/12/2026'
+                  estado: vigente
+                  texto_libre: 'Preparación de menús.'
+                  contacto: 'contacto@example.com'
+                  embedding: 'AACAPwAAAAA='
+                  embedding_model_name: nomic-embed-text
+                  embedding_model_version: '1.5'
+                  embedding_dim: 3
+                  interesada: false
+              soloClave:
+                summary: Solo comunidad y código (el resto toma valores por defecto)
+                value:
+                  comunidad: Cantabria
+                  codigo: '062026011705'
+      responses:
+        '200':
+          description: >-
+            Confirmación de la persistencia. La operación es idempotente por
+            `(comunidad, codigo)`: devolverla dos veces no crea una segunda
+            fila (REQ-001).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfertaCreada'
+              examples:
+                persistida:
+                  summary: Oferta persistida
+                  value:
+                    comunidad: Cantabria
+                    codigo: '062026003633'
+                    estado: vigente
+                    mensaje: oferta persistida correctamente
+        '422':
+          description: Error global de validación de la petición.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorHTTP'
+        '503':
+          description: >-
+            El repositorio de persistencia no está disponible. La API arrancó
+            sin la capa de persistencia o todavía no ha registrado el
+            repositorio en su estado interno.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorHTTP'
+  /persistencia/ofertas/vigentes:
+    get:
+      operationId: listarOfertasVigentes
+      summary: Listar ofertas vigentes
+      description: >-
+        Devuelve solo las ofertas cuyo `estado` es `vigente`, ordenadas por
+        `fecha_fin_difusion` (REQ-009). Cada elemento incluye la ficha
+        completa, con el `embedding` en base64 cuando lo hay. No acepta
+        parámetros ni cuerpo.
+      tags:
+        - persistencia
+      responses:
+        '200':
+          description: >-
+            Lista de ofertas vigentes. Puede ser vacía si no hay ninguna
+            oferta en ese estado.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Oferta'
+              examples:
+                conOfertas:
+                  summary: Dos ofertas vigentes
+                  value:
+                    - comunidad: Cantabria
+                      provincia: CANTABRIA
+                      codigo: '062026003633'
+                      ocupacion: Cocinero/a
+                      municipio: SANTANDER
+                      sector: ''
+                      nivel: ''
+                      contrato: ''
+                      fecha_inicio_difusion: '18/11/2026'
+                      fecha_fin_difusion: '03/12/2026'
+                      estado: vigente
+                      texto_libre: 'Preparación de menús.'
+                      contacto: 'contacto@example.com'
+                      embedding: null
+                      embedding_model_name: null
+                      embedding_model_version: null
+                      embedding_dim: null
+                      interesada: false
+                      fecha_alta: '2026-11-18T01:05:00+00:00'
+                      fecha_cierre: null
+                      fecha_ultima_actualizacion: '2026-11-18T01:05:00+00:00'
+                    - comunidad: Cantabria
+                      provincia: CANTABRIA
+                      codigo: '062026011705'
+                      ocupacion: Auxiliar de enfermería
+                      municipio: TORRELAVEGA
+                      sector: ''
+                      nivel: ''
+                      contrato: ''
+                      fecha_inicio_difusion: '20/11/2026'
+                      fecha_fin_difusion: '05/12/2026'
+                      estado: vigente
+                      texto_libre: 'Atención-geriátrica.'
+                      contacto: 'contacto@example.com'
+                      embedding: null
+                      embedding_model_name: null
+                      embedding_model_version: null
+                      embedding_dim: null
+                      interesada: false
+                      fecha_alta: '2026-11-20T06:05:00+00:00'
+                      fecha_cierre: null
+                      fecha_ultima_actualizacion: '2026-11-20T06:05:00+00:00'
+                sinOfertas:
+                  summary: Sin ofertas vigentes
+                  value: []
+        '503':
+          description: El repositorio de persistencia no está disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorHTTP'
+  /persistencia/ofertas/{comunidad}/{codigo}:
+    get:
+      operationId: consultarOferta
+      summary: Consultar una oferta por comunidad y código
+      description: >-
+        Devuelve todos los campos persistidos de la oferta identificada por la
+        pareja `(comunidad, codigo)` (REQ-008). El `embedding` se devuelve en
+        base64 junto con el nombre, la versión del modelo y su dimensión
+        (REQ-004, DEC-002). No acepta cuerpo.
+      tags:
+        - persistencia
+      parameters:
+        - name: comunidad
+          in: path
+          required: true
+          description: Comunidad de la oferta.
+          schema:
+            type: string
+          example: Cantabria
+        - name: codigo
+          in: path
+          required: true
+          description: >-
+            Código de la oferta, texto de 12 dígitos con los ceros por
+            delante (NFR-003).
+          schema:
+            type: string
+            pattern: '^[0-9]{12}$'
+          example: '062026003633'
+      responses:
+        '200':
+          description: Oferta encontrada con todos sus campos persistidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Oferta'
+              examples:
+                conEmbedding:
+                  summary: Oferta con embedding y metadatos del modelo
+                  value:
+                    comunidad: Cantabria
+                    provincia: CANTABRIA
+                    codigo: '062026003633'
+                    ocupacion: Cocinero/a
+                    municipio: SANTANDER
+                    sector: ''
+                    nivel: ''
+                    contrato: ''
+                    fecha_inicio_difusion: '18/11/2026'
+                    fecha_fin_difusion: '03/12/2026'
+                    estado: vigente
+                    texto_libre: 'Preparación de menús.'
+                    contacto: 'contacto@example.com'
+                    embedding: 'AACAPwAAAAA='
+                    embedding_model_name: nomic-embed-text
+                    embedding_model_version: '1.5'
+                    embedding_dim: 3
+                    interesada: false
+                    fecha_alta: '2026-11-18T01:05:00+00:00'
+                    fecha_cierre: null
+                    fecha_ultima_actualizacion: '2026-11-18T01:05:00+00:00'
+        '404':
+          description: >-
+            No se encontró ninguna oferta con esa pareja `(comunidad, codigo)`.
+            Es la respuesta exigida por REQ-008 para dejar constancia
+            explícita de que la oferta no existe (por ejemplo, un código
+            importado desde `data/seen_codes.json` que aún no tiene ficha
+            ingerida no se considera encontrado con este endpoint).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorHTTP'
+              examples:
+                noEncontrada:
+                  summary: Oferta inexistente
+                  value:
+                    detail: 'No se encontró la oferta (Cantabria, 062026999999)'
+        '503':
+          description: El repositorio de persistencia no está disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorHTTP'
+  /persistencia/codigos-vistos/{comunidad}:
+    get:
+      operationId: listarCodigosVistos
+      summary: Listar los códigos vistos de una comunidad
+      description: >-
+        Devuelve, sin duplicados, todos los códigos de oferta registrados para
+        la comunidad: tanto los importados desde `data/seen_codes.json`
+        (estado `sin_ficha`) como los procedentes de fichas completas
+        ingeridas (REQ-016). Otros módulos la usan como filtro de ofertas
+        nuevas: un código ausente de la lista se considera oferta nueva. No
+        acepta cuerpo.
+      tags:
+        - persistencia
+      parameters:
+        - name: comunidad
+          in: path
+          required: true
+          description: Comunidad cuyos códigos vistos se listan.
+          schema:
+            type: string
+          example: Cantabria
+      responses:
+        '200':
+          description: >-
+            Lista de códigos vistos de la comunidad. Puede estar vacía si esa
+            comunidad no tiene ningún código registrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodigosVistos'
+              examples:
+                conCodigos:
+                  summary: Códigos importados y ingeridos
+                  value:
+                    comunidad: Cantabria
+                    codigos:
+                      - '062026003484'
+                      - '062026003633'
+                      - '062026011705'
+                sinCodigos:
+                  summary: Comunidad sin códigos registrados
+                  value:
+                    comunidad: Asturias
+                    codigos: []
+        '503':
+          description: El repositorio de persistencia no está disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorHTTP'
+components:
+  schemas:
+    OfertaEntrada:
+      type: object
+      description: >-
+        Datos de una oferta para crear o actualizar. `comunidad` y `codigo`
+        son los únicos campos obligatorios: identifican la oferta y el resto
+        toma su valor por defecto (cadenas vacías, `estado` `vigente`,
+        `interesada` `false` y `embedding` nulo).
+      required:
+        - comunidad
+        - codigo
+      properties:
+        comunidad:
+          type: string
+          description: >-
+            Comunidad autónoma de la oferta. Viaja en el modelo para no rehacer
+            datos en el futuro (NFR-007); esta feature opera con `Cantabria`.
+          example: Cantabria
+        codigo:
+          type: string
+          description: >-
+            Código de la oferta, texto de 12 dígitos conservado con sus ceros
+            por delante, nunca un número (NFR-003).
+          pattern: '^[0-9]{12}$'
+          example: '062026003633'
+        provincia:
+          type: string
+          default: ''
+          description: Provincia de la oferta, en mayúsculas.
+          example: CANTABRIA
+        ocupacion:
+          type: string
+          default: ''
+          description: Denominación del puesto publicada por la ficha.
+          example: Cocinero/a
+        municipio:
+          type: string
+          default: ''
+          description: Municipio de la oferta, en mayúsculas.
+          example: SANTANDER
+        sector:
+          type: string
+          default: ''
+          description: >-
+            Sector profesional. La ficha del portal no lo publica y no hay
+            otra fuente en el alcance, así que se almacena siempre vacío
+            (DEC-009).
+          example: ''
+        nivel:
+          type: string
+          default: ''
+          description: >-
+            Nivel de estudios. La ficha del portal no lo publica y no hay
+            otra fuente en el alcance, así que se almacena siempre vacío
+            (DEC-009).
+          example: ''
+        contrato:
+          type: string
+          default: ''
+          description: >-
+            Tipo de contrato. La ficha del portal no lo publica y no hay
+            otra fuente en el alcance, así que se almacena siempre vacío
+            (DEC-009).
+          example: ''
+        fecha_inicio_difusion:
+          type: string
+          nullable: true
+          description: >-
+            Fecha de inicio de difusión en formato `dd/mm/aaaa` (NFR-004).
+            `null` si no se conoce.
+          example: '18/11/2026'
+        fecha_fin_difusion:
+          type: string
+          nullable: true
+          description: >-
+            Fecha de fin de difusión en formato `dd/mm/aaaa` (NFR-004). `null`
+            si no se conoce.
+          example: '03/12/2026'
+        estado:
+          type: string
+          default: vigente
+          enum:
+            - sin_ficha
+            - vigente
+            - cerrada
+          description: >-
+            Estado de vigencia de la oferta (DEC-003). `sin_ficha` para códigos
+            importados sin ficha, `vigente` para ofertas con ficha ingerida y
+            `cerrada` para ofertas cerradas.
+          example: vigente
+        texto_libre:
+          type: string
+          default: ''
+          description: >-
+            Texto libre de la oferta. La purga lo vacía cuando la oferta se
+            reduce a registro mínimo (REQ-006).
+          example: 'Preparación de menús.'
+        contacto:
+          type: string
+          default: ''
+          description: >-
+            Información de contacto publicada por la ficha. La purga lo vacía
+            cuando la oferta se reduce a registro mínimo (REQ-006).
+          example: 'contacto@example.com'
+        embedding:
+          type: string
+          format: byte
+          nullable: true
+          description: >-
+            Vector de embedding de la oferta codificado en base64. En la base
+            de datos es un BLOB con los bytes contiguos del vector `float32`
+            (DEC-002). `null` si la oferta todavía no tiene embedding
+            (REQ-004).
+          example: 'AACAPwAAAAA='
+        embedding_model_name:
+          type: string
+          nullable: true
+          description: >-
+            Nombre del modelo que generó el embedding. `null` si la oferta no
+            tiene embedding (REQ-004, DEC-002).
+          example: nomic-embed-text
+        embedding_model_version:
+          type: string
+          nullable: true
+          description: >-
+            Versión del modelo que generó el embedding. `null` si la oferta no
+            tiene embedding (REQ-004, DEC-002).
+          example: '1.5'
+        embedding_dim:
+          type: integer
+          nullable: true
+          description: >-
+            Dimensión del vector de embedding. `null` si la oferta no tiene
+            embedding; junto con el nombre y la versión del modelo permite
+            reconstruir el array `float32` sin ambigüedad (DEC-002).
+          example: 768
+        interesada:
+          type: boolean
+          default: false
+          description: >-
+            Marca reservada para `api-candidaturas`: `true` si la oferta está
+            marcada como interesante, para que la purga no la toque
+            (DEC-007, SUP-009). No confundir con los estados de candidatura,
+            que no se almacenan en este esquema.
+          example: false
+    Oferta:
+      type: object
+      description: >-
+        Oferta persistida con todos sus campos. Incluye los campos
+        estructurales de la ficha de REQ-002 más `sector`, `nivel` y
+        `contrato`, el `estado`, el `embedding` con sus metadatos y las
+        marcas temporales del registro.
+      required:
+        - comunidad
+        - provincia
+        - codigo
+        - ocupacion
+        - municipio
+        - sector
+        - nivel
+        - contrato
+        - estado
+        - texto_libre
+        - contacto
+        - interesada
+      properties:
+        comunidad:
+          type: string
+          description: Comunidad autónoma de la oferta.
+          example: Cantabria
+        provincia:
+          type: string
+          description: Provincia de la oferta. Vacía si no se conoce.
+          example: CANTABRIA
+        codigo:
+          type: string
+          description: >-
+            Código de la oferta, texto de 12 dígitos conservado con sus ceros
+            por delante (NFR-003).
+          pattern: '^[0-9]{12}$'
+          example: '062026003633'
+        ocupacion:
+          type: string
+          description: Denominación del puesto publicada por la ficha.
+          example: Cocinero/a
+        municipio:
+          type: string
+          description: Municipio de la oferta. Vacío si no se conoce.
+          example: SANTANDER
+        sector:
+          type: string
+          description: >-
+            Sector profesional. Se conserva en el modelo pero se devuelve
+            siempre vacío porque la ficha no lo publica (DEC-009).
+          example: ''
+        nivel:
+          type: string
+          description: >-
+            Nivel de estudios. Se conserva en el modelo pero se devuelve
+            siempre vacío porque la ficha no lo publica (DEC-009).
+          example: ''
+        contrato:
+          type: string
+          description: >-
+            Tipo de contrato. Se conserva en el modelo pero se devuelve
+            siempre vacío porque la ficha no lo publica (DEC-009).
+          example: ''
+        fecha_inicio_difusion:
+          type: string
+          nullable: true
+          description: >-
+            Fecha de inicio de difusión en formato `dd/mm/aaaa` (NFR-004).
+            `null` si no se conoce.
+          example: '18/11/2026'
+        fecha_fin_difusion:
+          type: string
+          nullable: true
+          description: >-
+            Fecha de fin de difusión en formato `dd/mm/aaaa` (NFR-004). `null`
+            si no se conoce.
+          example: '03/12/2026'
+        estado:
+          type: string
+          enum:
+            - sin_ficha
+            - vigente
+            - cerrada
+          description: Estado de vigencia de la oferta (DEC-003).
+          example: vigente
+        texto_libre:
+          type: string
+          description: >-
+            Texto libre de la oferta. Queda vacío tras la purga por retención
+            (REQ-006).
+          example: 'Preparación de menús.'
+        contacto:
+          type: string
+          description: >-
+            Información de contacto de la oferta. Queda vacío tras la purga por
+            retención (REQ-006).
+          example: 'contacto@example.com'
+        embedding:
+          type: string
+          format: byte
+          nullable: true
+          description: >-
+            Vector de embedding de la oferta codificado en base64. En la base
+            de datos es un BLOB con los bytes contiguos del vector `float32`
+            (DEC-002). `null` si la oferta no tiene embedding. Sobrevive a la
+            purga: la reducción a registro mínimo conserva el embedding y sus
+            metadatos (REQ-005).
+          example: 'AACAPwAAAAA='
+        embedding_model_name:
+          type: string
+          nullable: true
+          description: Nombre del modelo que generó el embedding.
+          example: nomic-embed-text
+        embedding_model_version:
+          type: string
+          nullable: true
+          description: Versión del modelo que generó el embedding.
+          example: '1.5'
+        embedding_dim:
+          type: integer
+          nullable: true
+          description: >-
+            Dimensión del vector de embedding, por ejemplo 768 para
+            `nomic-embed-text` (DEC-002).
+          example: 768
+        interesada:
+          type: boolean
+          description: >-
+            Marca reservada para `api-candidaturas`. `true` si la oferta está
+            marcada como interesante y la purga no debe reducirla a registro
+            mínimo (DEC-007).
+          example: false
+        fecha_alta:
+          type: string
+          nullable: true
+          description: >-
+            Marca ISO 8601 del momento en que se creó el registro. No cambia
+            en las actualizaciones posteriores.
+          example: '2026-11-18T01:05:00+00:00'
+        fecha_cierre:
+          type: string
+          nullable: true
+          description: >-
+            Marca ISO 8601 del momento en que la oferta pasó a `cerrada`.
+            `null` mientras no esté cerrada (REQ-003).
+          example: null
+        fecha_ultima_actualizacion:
+          type: string
+          nullable: true
+          description: >-
+            Marca ISO 8601 de la última escritura sobre el registro (REQ-001).
+          example: '2026-11-18T01:05:00+00:00'
+    OfertaCreada:
+      type: object
+      description: Confirmación de la creación o actualización de una oferta.
+      required:
+        - comunidad
+        - codigo
+        - estado
+        - mensaje
+      properties:
+        comunidad:
+          type: string
+          description: Comunidad de la oferta persistida.
+          example: Cantabria
+        codigo:
+          type: string
+          description: Código de la oferta persistida, texto de 12 dígitos.
+          pattern: '^[0-9]{12}$'
+          example: '062026003633'
+        estado:
+          type: string
+          enum:
+            - sin_ficha
+            - vigente
+            - cerrada
+          description: Estado con el que queda registrada la oferta.
+          example: vigente
+        mensaje:
+          type: string
+          default: oferta persistida correctamente
+          description: Mensaje de confirmación de la persistencia.
+          example: oferta persistida correctamente
+    CodigosVistos:
+      type: object
+      description: >-
+        Lista de códigos vistos de una comunidad (REQ-016). Incluye los
+        importados desde `data/seen_codes.json` y los procedentes de fichas
+        completas ingeridas, sin duplicados.
+      required:
+        - comunidad
+        - codigos
+      properties:
+        comunidad:
+          type: string
+          description: Comunidad cuyos códigos vistos se han listado.
+          example: Cantabria
+        codigos:
+          type: array
+          description: >-
+            Códigos de oferta vistos en esa comunidad, cada uno como texto de
+            12 dígitos con sus ceros por delante (NFR-003). Un código ausente
+            de la lista se considera oferta nueva.
+          items:
+            type: string
+            pattern: '^[0-9]{12}$'
+          example:
+            - '062026003484'
+            - '062026003633'
+            - '062026011705'
+    ErrorHTTP:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+          description: Descripción del error de la API.
+          example: 'No se encontró la oferta (Cantabria, 062026999999)'

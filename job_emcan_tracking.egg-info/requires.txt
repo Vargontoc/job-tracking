@@ -1,5 +1,6 @@
 fastapi
 httpx
+numpy
 pdfplumber
 PyYAML
 pytest

@@ -26,3 +26,4 @@ source/api/buscador/routes.py
 source/api/buscador/scheduler.py
 source/api/buscador/scraper.py
 source/api/buscador/state.py
+source/api/persistencia/__init__.py
