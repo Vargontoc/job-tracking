@@ -97,6 +97,11 @@ def cargar_configuracion(
     hora_ejecucion = _obtener_entero(
         contenido, "hora_ejecucion", 2, ruta, minimo=0
     )
+    if hora_ejecucion > 23:
+        raise ErrorConfiguracion(
+            f"Error de configuración del histórico: "
+            f"'hora_ejecucion' debe ser <= 23, recibido {hora_ejecucion} en {ruta}."
+        )
     ausencias = _obtener_entero(
         contenido, "ausencias_consecutivas", 2, ruta, minimo=1
     )

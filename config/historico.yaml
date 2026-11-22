@@ -1,4 +1,4 @@
-# Configuración del histórico de altas y cierres de ofertas.
+# Contrato de configuración: histórico de altas y cierres de ofertas.
 #
 # Formato:
 # - La raíz debe ser un mapa YAML. Un YAML malformado, vacío o cuya raíz no
@@ -11,43 +11,53 @@
 # - Un submapa presente con un valor que no sea un mapa se rechaza con un
 #   error controlado que identifica el submapa problemático.
 # - Un campo con un tipo incorrecto se rechaza con un error controlado que
-#   identifica el campo. Los campos enteros no admiten booleanos.
+#   identifica el campo. Los campos enteros no admiten booleanos: `true` y
+#   `false` no son enteros válidos.
 # - La zona horaria se valida con zoneinfo.ZoneInfo; una zona inválida se
 #   rechaza con un error controlado (NFR-001).
 #
 # Campos de nivel superior:
 #   zona_horaria: zona horaria IANA para todas las operaciones del histórico
 #     (NFR-001). Por defecto: "Europe/Madrid".
-#   hora_ejecucion: hora del día (0-23) en la que se ejecuta el cierre diario.
-#     Debe ser posterior a la pasada del buscador (01:00). Por defecto: 2.
+#   hora_ejecucion: hora del día del cierre diario, como un único entero.
+#     Por defecto: 2 (02:00), posterior a la pasada del buscador (01:00).
+#     La carga solo exige un entero >= 0; no comprueba un máximo de 23 ni que
+#     sea posterior a la hora del buscador. El valor debe ser una hora de
+#     día válida en el rango 0-23, porque la tarea diaria la usa como hora
+#     del reloj. No se admiten listas de horas, minutos, fracciones de hora ni
+#     expresiones cron.
 #   ausencias_consecutivas: número de listados consecutivos sin un código para
-#     que se considere desaparecido (NFR-003). Por defecto: 2.
+#     que se considere desaparecido (NFR-003). Entero >= 1. Por defecto: 2.
 #   umbral_caida_pct: porcentaje de caída del recuento del listado respecto al
 #     anterior por encima del cual se abstiene el cierre por desaparición
-#     (REQ-008). Por defecto: 30.
+#     (REQ-008). Entero >= 0. Por defecto: 30.
 #   recuento_minimo: recuento mínimo del listado por debajo del cual se
-#     abstiene el cierre por desaparición (REQ-008). Por defecto: 70.
+#     abstiene el cierre por desaparición (REQ-008). Entero >= 0. Por defecto:
+#     70.
 #
 # Submapa `rutas`:
-#   sqlite_historico: ruta al fichero SQLite propio del histórico. Relativa a
-#     la raíz del proyecto. Por defecto: "data/job_emcan_historico.db".
+#   sqlite_historico: ruta al fichero SQLite propio del histórico (DEC-001).
+#     Relativa a la raíz del proyecto. El directorio padre se crea si no
+#     existe. Por defecto: "data/job_emcan_historico.db".
 #   sqlite_persistencia: ruta al fichero SQLite de api-persistencia que se
-#     leerá en modo solo lectura (DEC-006). Relativa a la raíz del proyecto.
-#     Por defecto: "data/job_emcan.db".
+#     leerá en modo **solo lectura (`mode=ro`)** (DEC-006). Relativa a la raíz
+#     del proyecto. Si el fichero no existe, las consultas históricas
+#     devuelven listas vacías sin crearlo. Por defecto: "data/job_emcan.db".
 #
 # Submapa `buscador`:
-#   url_base: URL base para consultar GET /buscador/status. Por defecto:
-#     "http://localhost:8000".
+#   url_base: URL base para consultar GET /buscador/status. El cliente le
+#     añade "/buscador/status". Por defecto: "http://localhost:8000".
 #
 # Submapa `persistencia`:
 #   url_base: URL base para consultar persistencia-api. Por defecto:
 #     "http://localhost:8000".
 #
 # Submapa `pdf`:
-#   comunidad: nombre de la comunidad autónoma del PDF de difusión. Por
-#     defecto: "Cantabria".
-#   identificador: identificador de la comunidad usado en el PDF. Por defecto:
-#     "cantabria".
+#   comunidad: comunidad del PDF de difusión. Es el valor que se entrega al
+#     descargador del PDF y al parser en proceso. Por defecto: "Cantabria".
+#   identificador: identificador de la comunidad del PDF de difusión. Por
+#     defecto: "cantabria". La carga lo lee y lo expone en la configuración,
+#     pero la aplicación no lo consume hoy.
 #
 # Valores por defecto (si el campo o el submapa faltan):
 #   zona_horaria = "Europe/Madrid", hora_ejecucion = 2,
@@ -60,6 +70,12 @@
 #
 # Esta configuración NO contiene rutas de servidor de base de datos ni
 # credenciales. SQLite es un fichero local único con WAL.
+#
+# Consumidores: `source/api/historico/config.py` carga este fichero y
+# `source/api/main.py` aplica sus valores al arrancar la aplicación (zona
+# horaria y hora de ejecución de la tarea diaria, ruta del SQLite propio con
+# WAL, ruta del SQLite de persistencia en solo lectura, URL base del
+# buscador, URL base de persistencia y comunidad del PDF).
 
 zona_horaria: "Europe/Madrid"
 hora_ejecucion: 2

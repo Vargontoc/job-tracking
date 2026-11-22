@@ -124,6 +124,28 @@ def test_hora_ejecucion_negativa_lanza_error(tmp_path: Path) -> None:
         cargar_configuracion(config_file)
 
 
+def test_hora_ejecucion_fuera_de_rango_lanza_error(tmp_path: Path) -> None:
+    """Una hora de ejecución superior a 23 lanza ErrorConfiguracion."""
+    config_file = tmp_path / "historico.yaml"
+    config_file.write_text("hora_ejecucion: 24\n", encoding="utf-8")
+    with pytest.raises(ErrorConfiguracion, match="hora_ejecucion"):
+        cargar_configuracion(config_file)
+    config_file.write_text("hora_ejecucion: 25\n", encoding="utf-8")
+    with pytest.raises(ErrorConfiguracion, match="hora_ejecucion"):
+        cargar_configuracion(config_file)
+
+
+def test_hora_ejecucion_en_los_extremos_es_valida(tmp_path: Path) -> None:
+    """Los valores 0 y 23 son válidos para hora_ejecucion."""
+    config_file = tmp_path / "historico.yaml"
+    config_file.write_text("hora_ejecucion: 0\n", encoding="utf-8")
+    config_0 = cargar_configuracion(config_file)
+    assert config_0.hora_ejecucion == 0
+    config_file.write_text("hora_ejecucion: 23\n", encoding="utf-8")
+    config_23 = cargar_configuracion(config_file)
+    assert config_23.hora_ejecucion == 23
+
+
 def test_ausencias_consecutivas_cero_lanza_error(tmp_path: Path) -> None:
     """Un valor de ausencias consecutivas inferior a 1 lanza ErrorConfiguracion."""
     config_file = tmp_path / "historico.yaml"

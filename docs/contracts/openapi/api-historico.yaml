@@ -1,0 +1,435 @@
+# Origen: specs/api-historico (REQ-001, REQ-002, REQ-012, SUP-002, SUP-003, DEC-006)
+# Estado del contrato: contrastado con el código
+#
+# Desviación conocida respecto a REQ-002 y REQ-012: los endpoints de oferta no
+# devuelven hoy el campo `estado` ni el campo `fecha_fin_difusion`, que ambos
+# requisitos declaran como parte del conjunto mínimo del resultado. La
+# implementación verificada (`source/api/historico/read_adapter.py`) proyecta
+# la tabla `ofertas` sobre un resumen de seis campos (`comunidad`, `codigo`,
+# `ocupacion`, `municipio`, `fecha_alta`, `fecha_cierre`) y las tres consultas
+# SQL no seleccionan `estado` ni `fecha_fin_difusion`. Este contrato se limita
+# a lo implementado y queda pendiente de que el desarrollador amplíe
+# `OfertaResumen` y las tres SQL de `read_adapter.py`, y de que TASK-017 se
+# revalide.
+#
+# Los códigos de oferta son texto de 12 dígitos, con los ceros por delante, y
+# nunca un número. Los parámetros de rango `desde` y `hasta` son fechas ISO
+# `YYYY-MM-DD`. El formato `dd/mm/aaaa` corresponde a las fechas de difusión
+# (`fecha_inicio_difusion` y `fecha_fin_difusion`) de la ficha del portal, que
+# este contrato no devuelve hoy.
+openapi: 3.1.0
+info:
+  title: Job Emcan Tracking API - Histórico de altas y cierres
+  version: 1.0.0
+  description: >-
+    API de consulta del histórico de ofertas: altas por rango de `fecha_alta`,
+    cierres por rango de `fecha_cierre`, cierres por rango de
+    `fecha_fin_difusion` y resumen diario de altas y cierres (REQ-002,
+    REQ-012). Las cuatro operaciones se sirven desde `historico-read-adapter`,
+    que abre el fichero SQLite de `api-persistencia` en modo **solo lectura
+    (`mode=ro`)** y consulta directamente la tabla `ofertas` (DEC-006). El
+    histórico no escribe nunca en esa base de datos (SUP-003) ni crea ofertas
+    nuevas (REQ-001); la fuente de verdad sigue siendo `api-persistencia`
+    (SUP-002).
+
+    No exige autenticación, como el resto de la API: las cuatro operaciones
+    responden `200` sin cabeceras de autenticación y nunca devuelven `401` ni
+    `403`.
+
+    Convenciones de datos:
+    - `codigo` es texto de 12 dígitos, con los ceros por delante, y nunca un
+      número.
+    - `desde` y `hasta` son fechas ISO `YYYY-MM-DD`. El rango es cerrado por
+      los dos extremos: se incluyen las ofertas cuya fecha cae en `desde` y en
+      `hasta`.
+    - `fecha_alta` y `fecha_cierre` son las marcas ISO 8601 que
+      `api-persistencia` registra en la tabla `ofertas`. `fecha_cierre` es
+      `null` mientras la oferta no esté cerrada.
+    - `ocupacion` y `municipio` se devuelven como cadena vacía cuando la
+      columna de la base de datos es nula.
+
+    Convive en el mismo proceso con los endpoints del buscador
+    (`api-buscador.yaml`), de persistencia (`api-persistencia.yaml`) y del
+    parseo de PDF (`api-pdf-parser.yaml`).
+paths:
+  /historico/altas:
+    get:
+      operationId: consultarAltasHistorico
+      summary: Consultar las ofertas dadas de alta en un rango de fechas
+      description: >-
+        Devuelve las ofertas cuya `fecha_alta` está dentro del rango cerrado
+        `[desde, hasta]` (REQ-002). El resultado se ordena por `fecha_alta`
+        ascendente. Un rango sin resultados devuelve una lista vacía, sin
+        error; lo mismo ocurre si el fichero SQLite de `api-persistencia` no
+        existe, en cuyo caso no se crea (DEC-006).
+      tags:
+        - historico
+      parameters:
+        - $ref: '#/components/parameters/Desde'
+        - $ref: '#/components/parameters/Hasta'
+      responses:
+        '200':
+          description: >-
+            Lista de ofertas dadas de alta dentro del rango. Cada elemento
+            incluye comunidad, código, ocupación, municipio, `fecha_alta` y
+            `fecha_cierre`. `fecha_cierre` es `null` si la oferta no está
+            cerrada.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OfertaHistorica'
+              examples:
+                conOfertas:
+                  summary: Dos ofertas dadas de alta en el rango
+                  value:
+                    - comunidad: Cantabria
+                      codigo: '062026003633'
+                      ocupacion: Cocinero/a
+                      municipio: SANTANDER
+                      fecha_alta: '2026-11-18T01:05:00+00:00'
+                      fecha_cierre: null
+                    - comunidad: Cantabria
+                      codigo: '062026011705'
+                      ocupacion: Auxiliar de enfermería
+                      municipio: TORRELAVEGA
+                      fecha_alta: '2026-11-20T06:05:00+00:00'
+                      fecha_cierre: null
+                sinOfertas:
+                  summary: Rango sin altas
+                  value: []
+        '400':
+          description: >-
+            Alguna de las fechas no tiene formato `YYYY-MM-DD` o `desde` es
+            posterior a `hasta`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorHTTP'
+              examples:
+                formatoInvalido:
+                  summary: Fecha con formato no ISO
+                  value:
+                    detail: >-
+                      El parámetro 'desde' debe tener formato YYYY-MM-DD;
+                      recibido: 'no-es-fecha'
+                rangoInvertido:
+                  summary: Rango con `desde` posterior a `hasta`
+                  value:
+                    detail: >-
+                      El parámetro 'desde' (2026-11-20) no puede ser
+                      posterior a 'hasta' (2026-11-10)
+        '503':
+          description: >-
+            El histórico no está disponible. La API arrancó sin la capa de
+            lectura del histórico o todavía no ha registrado el adaptador de
+            lectura en su estado interno.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorHTTP'
+              examples:
+                historicoNoDisponible:
+                  summary: Histórico no inicializado
+                  value:
+                    detail: >-
+                      El histórico no está disponible. Comprueba la
+                      configuración.
+  /historico/cierres:
+    get:
+      operationId: consultarCierresHistorico
+      summary: Consultar las ofertas cerradas en un rango de fechas de cierre
+      description: >-
+        Devuelve las ofertas cuya `fecha_cierre` está dentro del rango cerrado
+        `[desde, hasta]` (REQ-012). Solo incluye ofertas con `fecha_cierre` no
+        nula, es decir, ofertas cerradas. El resultado se ordena por
+        `fecha_cierre` ascendente. Un rango sin resultados devuelve una lista
+        vacía, sin error.
+      tags:
+        - historico
+      parameters:
+        - $ref: '#/components/parameters/Desde'
+        - $ref: '#/components/parameters/Hasta'
+      responses:
+        '200':
+          description: >-
+            Lista de ofertas cerradas dentro del rango. Cada elemento incluye
+            comunidad, código, ocupación, municipio, `fecha_alta` y
+            `fecha_cierre`.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OfertaHistorica'
+              examples:
+                conOfertas:
+                  summary: Dos ofertas cerradas en el rango
+                  value:
+                    - comunidad: Cantabria
+                      codigo: '062026003633'
+                      ocupacion: Cocinero/a
+                      municipio: SANTANDER
+                      fecha_alta: '2026-11-18T01:05:00+00:00'
+                      fecha_cierre: '2026-11-21T02:10:00+00:00'
+                    - comunidad: Cantabria
+                      codigo: '062026011705'
+                      ocupacion: Auxiliar de enfermería
+                      municipio: TORRELAVEGA
+                      fecha_alta: '2026-11-20T06:05:00+00:00'
+                      fecha_cierre: '2026-11-22T02:10:00+00:00'
+                sinOfertas:
+                  summary: Rango sin cierres
+                  value: []
+        '400':
+          description: >-
+            Alguna de las fechas no tiene formato `YYYY-MM-DD` o `desde` es
+            posterior a `hasta`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorHTTP'
+        '503':
+          description: El histórico no está disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorHTTP'
+  /historico/cierres-por-fin-difusion:
+    get:
+      operationId: consultarCierresPorFinDifusionHistorico
+      summary: Consultar las ofertas cerradas en un rango de fechas de fin de difusión
+      description: >-
+        Devuelve las ofertas cuya `fecha_fin_difusion` está dentro del rango
+        cerrado `[desde, hasta]` (REQ-012). Solo incluye ofertas con
+        `fecha_fin_difusion` no nula. El resultado se ordena por
+        `fecha_fin_difusion` ascendente. Un rango sin resultados devuelve una
+        lista vacía, sin error.
+      tags:
+        - historico
+      parameters:
+        - $ref: '#/components/parameters/Desde'
+        - $ref: '#/components/parameters/Hasta'
+      responses:
+        '200':
+          description: >-
+            Lista de ofertas con fecha de fin de difusión dentro del rango.
+            Cada elemento incluye comunidad, código, ocupación, municipio,
+            `fecha_alta` y `fecha_cierre`.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OfertaHistorica'
+              examples:
+                conOfertas:
+                  summary: Una oferta con fecha de fin de difusión en el rango
+                  value:
+                    - comunidad: Cantabria
+                      codigo: '062026003633'
+                      ocupacion: Cocinero/a
+                      municipio: SANTANDER
+                      fecha_alta: '2026-11-18T01:05:00+00:00'
+                      fecha_cierre: '2026-11-21T02:10:00+00:00'
+                sinOfertas:
+                  summary: Rango sin ofertas con fecha de fin de difusión
+                  value: []
+        '400':
+          description: >-
+            Alguna de las fechas no tiene formato `YYYY-MM-DD` o `desde` es
+            posterior a `hasta`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorHTTP'
+        '503':
+          description: El histórico no está disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorHTTP'
+  /historico/resumen:
+    get:
+      operationId: consultarResumenHistorico
+      summary: Consultar el resumen diario de altas y cierres
+      description: >-
+        Devuelve el número de altas y el número de cierres de cada día del
+        rango cerrado `[desde, hasta]` (REQ-012). Devuelve un elemento por día
+        del rango, en orden ascendente, incluidos los días sin actividad: un
+        día sin altas ni cierres devuelve los recuentos a `0`, no se omite. El
+        recuento de altas usa la `fecha_alta` de cada oferta y el de cierres
+        usa su `fecha_cierre`.
+      tags:
+        - historico
+      parameters:
+        - $ref: '#/components/parameters/Desde'
+        - $ref: '#/components/parameters/Hasta'
+      responses:
+        '200':
+          description: >-
+            Resumen diario del rango, un elemento por día. Cada elemento
+            incluye la `fecha` del día en formato `YYYY-MM-DD`, el número de
+            `altas` y el número de `cierres`.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ResumenDiario'
+              examples:
+                conActividad:
+                  summary: Tres días con actividad
+                  value:
+                    - fecha: '2026-11-14'
+                      altas: 1
+                      cierres: 0
+                    - fecha: '2026-11-15'
+                      altas: 0
+                      cierres: 1
+                    - fecha: '2026-11-16'
+                      altas: 0
+                      cierres: 1
+                sinActividad:
+                  summary: Días sin altas ni cierres
+                  value:
+                    - fecha: '2027-01-01'
+                      altas: 0
+                      cierres: 0
+                    - fecha: '2027-01-02'
+                      altas: 0
+                      cierres: 0
+        '400':
+          description: >-
+            Alguna de las fechas no tiene formato `YYYY-MM-DD` o `desde` es
+            posterior a `hasta`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorHTTP'
+        '503':
+          description: El histórico no está disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorHTTP'
+components:
+  parameters:
+    Desde:
+      name: desde
+      in: query
+      required: true
+      description: >-
+        Fecha de inicio del rango, en formato ISO `YYYY-MM-DD`. El rango es
+        cerrado: se incluyen las ofertas cuya fecha cae en este día.
+      schema:
+        type: string
+        format: date
+        pattern: '^\d{4}-\d{2}-\d{2}$'
+      example: '2026-11-10'
+    Hasta:
+      name: hasta
+      in: query
+      required: true
+      description: >-
+        Fecha de fin del rango, en formato ISO `YYYY-MM-DD`. El rango es
+        cerrado: se incluyen las ofertas cuya fecha cae en este día. No puede
+        ser anterior a `desde`.
+      schema:
+        type: string
+        format: date
+        pattern: '^\d{4}-\d{2}-\d{2}$'
+      example: '2026-11-18'
+  schemas:
+    OfertaHistorica:
+      type: object
+      description: >-
+        Oferta devuelta por las consultas de altas y de cierres. Es el resumen
+        de seis campos que la implementación proyecta sobre la tabla
+        `ofertas` de `api-persistencia`. No incluye `estado` ni
+        `fecha_fin_difusion`, que REQ-002 y REQ-012 declaran como parte del
+        conjunto mínimo del resultado: su ausencia es una desviación conocida,
+        pendiente de corregir en la implementación.
+      required:
+        - comunidad
+        - codigo
+        - ocupacion
+        - municipio
+        - fecha_alta
+        - fecha_cierre
+      properties:
+        comunidad:
+          type: string
+          description: Comunidad autónoma de la oferta.
+          example: Cantabria
+        codigo:
+          type: string
+          description: >-
+            Código de la oferta, texto de 12 dígitos conservado con sus ceros
+            por delante, nunca un número.
+          pattern: '^[0-9]{12}$'
+          example: '062026003633'
+        ocupacion:
+          type: string
+          description: >-
+            Denominación del puesto publicada por la ficha. Vacía si no se
+            conoce.
+          example: Cocinero/a
+        municipio:
+          type: string
+          description: >-
+            Municipio de la oferta, en mayúsculas. Vacío si no se conoce.
+          example: SANTANDER
+        fecha_alta:
+          type: string
+          description: >-
+            Marca ISO 8601 del momento en que `api-persistencia` creó el
+            registro de la oferta. No cambia en las actualizaciones
+            posteriores.
+          example: '2026-11-18T01:05:00+00:00'
+        fecha_cierre:
+          type: string
+          nullable: true
+          description: >-
+            Marca ISO 8601 del momento en que la oferta pasó a `cerrada`.
+            `null` mientras la oferta no esté cerrada.
+          example: null
+    ResumenDiario:
+      type: object
+      description: >-
+        Recuento de altas y de cierres de un día (REQ-012). El histórico
+        devuelve un elemento por cada día del rango consultado, con recuentos
+        a `0` en los días sin actividad.
+      required:
+        - fecha
+        - altas
+        - cierres
+      properties:
+        fecha:
+          type: string
+          format: date
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          description: Día del resumen, en formato ISO `YYYY-MM-DD`.
+          example: '2026-11-15'
+        altas:
+          type: integer
+          minimum: 0
+          description: Número de ofertas dadas de alta ese día.
+          example: 0
+        cierres:
+          type: integer
+          minimum: 0
+          description: Número de ofertas cerradas ese día.
+          example: 1
+    ErrorHTTP:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+          description: Descripción del error de la API.
+          example: >-
+            El parámetro 'desde' debe tener formato YYYY-MM-DD; recibido:
+            'no-es-fecha'

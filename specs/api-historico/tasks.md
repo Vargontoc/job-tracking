@@ -152,7 +152,7 @@ Los componentes del histórico son detalle de implementación interno del módul
 - **Prueba manual:**
   1. Registrar la ejecución del día y consultar si se ejecutó hoy: comprobar que devuelve que sí tras reiniciar la aplicación.
 
-### [ ] TASK-008 Adaptador del estado del buscador
+### [x] TASK-008 Adaptador del estado del buscador
 
 - **Cubre:** REQ-006, REQ-007, REQ-008, SUP-002, DEC-003, ALT-001, ALT-008
 - **Componente:** buscador-status-adapter | source/api/historico/buscador_client.py
@@ -171,7 +171,7 @@ Los componentes del histórico son detalle de implementación interno del módul
 - **Prueba manual:**
   1. Con la aplicación arrancada, consultar el adaptador contra `http://localhost:8000` y comprobar que devuelve el mismo `ultima_pasada` que muestra `GET /buscador/status`.
 
-### [ ] TASK-009 Cliente de la API de persistencia
+### [x] TASK-009 Cliente de la API de persistencia
 
 - **Cubre:** REQ-001, REQ-003, REQ-005, REQ-009, REQ-010, REQ-012, SUP-002, SUP-003, DEC-003, ALT-009
 - **Componente:** persistencia-adapter | source/api/historico/persistencia_client.py
@@ -191,7 +191,7 @@ Los componentes del histórico son detalle de implementación interno del módul
 - **Prueba manual:**
   1. Consultar una oferta vigente por su clave natural desde el cliente y comprobar que devuelve el estado y las fechas; actualizarla a `cerrada` y comprobar que conserva el texto y el contacto.
 
-### [ ] TASK-010 Adaptador de lectura histórica en solo lectura
+### [x] TASK-010 Adaptador de lectura histórica en solo lectura
 
 - **Cubre:** REQ-001, REQ-002, REQ-012, SUP-002, SUP-003, DEC-006
 - **Componente:** historico-read-adapter | source/api/historico/read_adapter.py
@@ -211,7 +211,7 @@ Los componentes del histórico son detalle de implementación interno del módul
 - **Prueba manual:**
   1. Consultar altas y cierres por rango sobre un fichero SQLite de prueba y comprobar que los rangos y el resumen diario son los esperados y que el fichero no ha cambiado.
 
-### [ ] TASK-011 Adaptador del listado oficial de códigos del PDF
+### [x] TASK-011 Adaptador del listado oficial de códigos del PDF
 
 - **Cubre:** REQ-005, SUP-001, SUP-002, DEC-002, ALT-004
 - **Componente:** pdf-listado-adapter | source/api/historico/pdf_adapter.py
@@ -229,7 +229,7 @@ Los componentes del histórico son detalle de implementación interno del módul
 - **Prueba manual:**
   1. Invocar el adaptador con el PDF de difusión real y comprobar que devuelve el conjunto de códigos y que ninguna petición HTTP a `/parse` aparece en el registro.
 
-### [ ] TASK-012 Evaluador del cierre por fecha de fin de difusión
+### [x] TASK-012 Evaluador del cierre por fecha de fin de difusión
 
 - **Cubre:** REQ-003, REQ-004, REQ-009, REQ-010, NFR-001, DEC-005, ALT-005
 - **Componente:** cierre-fecha-evaluator | source/api/historico/cierre_fecha.py
@@ -249,7 +249,7 @@ Los componentes del histórico son detalle de implementación interno del módul
 - **Prueba manual:**
   1. Ejecutar el evaluador con una oferta cuya fecha de fin es ayer y otra cuya fecha de fin es hoy, y comprobar los dos estados resultantes y la `fecha_cierre` de la primera.
 
-### [ ] TASK-013 Evaluador de desaparición y contador de ausencias consecutivas
+### [x] TASK-013 Evaluador de desaparición y contador de ausencias consecutivas
 
 - **Cubre:** REQ-004, REQ-005, REQ-007, REQ-009, REQ-010, REQ-011, NFR-003, SUP-001, SUP-003, DEC-002, DEC-004, DEC-005, ALT-003, ALT-004, ALT-007
 - **Componente:** desaparicion-evaluator | source/api/historico/desaparicion.py
@@ -271,7 +271,7 @@ Los componentes del histórico son detalle de implementación interno del módul
 - **Prueba manual:**
   1. Simular dos listados consecutivos sin un código y comprobar que la oferta pasa a `cerrada` con `fecha_cierre`, y que una tercera candidata ausente solo en el listado actual sigue `vigente`.
 
-### [ ] TASK-014 Guardián de recuento del listado
+### [x] TASK-014 Guardián de recuento del listado
 
 - **Cubre:** REQ-008, REQ-011, NFR-003, SUP-003, DEC-005, ALT-002, ALT-010
 - **Componente:** recuento-guardian | source/api/historico/recuento_guardian.py
@@ -290,7 +290,7 @@ Los componentes del histórico son detalle de implementación interno del módul
 - **Prueba manual:**
   1. Ejecutar el guardián con un recuento actual claramente menor que el anterior y comprobar que se registra la abstención con los dos recuentos y el umbral.
 
-### [ ] TASK-015 Tarea programada diaria de cierre
+### [x] TASK-015 Tarea programada diaria de cierre
 
 - **Cubre:** REQ-001, REQ-003, REQ-004, REQ-005, REQ-006, REQ-007, REQ-008, REQ-009, REQ-010, REQ-011, REQ-012, NFR-001, NFR-002, NFR-003, SUP-001, SUP-002, SUP-003, DEC-001, DEC-003, DEC-004, DEC-005, ALT-001, ALT-002, ALT-003, ALT-004, ALT-005, ALT-006, ALT-007, ALT-008, ALT-009
 - **Componente:** historico-task | source/api/historico/task.py
@@ -311,7 +311,7 @@ Los componentes del histórico son detalle de implementación interno del módul
 - **Prueba manual:**
   1. Arrancar la tarea con el reloj controlado a la hora configurada y comprobar que se ejecuta una vez y que la segunda ejecución del mismo día no hace nada.
 
-### [ ] TASK-016 Arranque y apagado del histórico en la aplicación
+### [x] TASK-016 Arranque y apagado del histórico en la aplicación
 
 - **Cubre:** REQ-006, REQ-011, NFR-001, NFR-002, SUP-001, SUP-002, SUP-003, DEC-001, DEC-002, ALT-001, ALT-008, ALT-009
 - **Componente:** api-service | source/api
@@ -332,7 +332,7 @@ Los componentes del histórico son detalle de implementación interno del módul
   1. Arrancar la aplicación y comprobar que aparecen `data/job_emcan_historico.db` migrado y que la tarea del histórico queda programada.
   2. Detener la aplicación y comprobar que no queda ninguna tarea del histórico viva.
 
-### [ ] TASK-017 Endpoints de consulta del histórico
+### [x] TASK-017 Endpoints de consulta del histórico
 
 - **Cubre:** REQ-002, REQ-012, REQ-001, SUP-002, SUP-003, DEC-006
 - **Componente:** historico-api | source/api/historico/routes.py
@@ -353,7 +353,7 @@ Los componentes del histórico son detalle de implementación interno del módul
 - **Prueba manual:**
   1. Consultar los tres endpoints con un rango de fechas sobre una base de prueba y comprobar que los resultados y el resumen diario son los esperados.
 
-### [ ] TASK-018 Verificación de integración del histórico
+### [X] TASK-018 Verificación de integración del histórico
 
 - **Cubre:** REQ-001, REQ-002, REQ-003, REQ-004, REQ-005, REQ-006, REQ-007, REQ-008, REQ-009, REQ-010, REQ-011, REQ-012, NFR-001, NFR-002, NFR-003, SUP-001, SUP-002, SUP-003, DEC-001, DEC-002, DEC-003, DEC-004, DEC-005, DEC-006, ALT-001, ALT-002, ALT-003, ALT-004, ALT-005, ALT-006, ALT-007, ALT-008, ALT-009
 - **Componente:** api-service | source/api
@@ -395,7 +395,7 @@ Los componentes del histórico son detalle de implementación interno del módul
   1. Revisar el contrato y comprobar que aparecen las cuatro interfaces de la fila de contratos afectados.
   2. Comparar el contrato con las respuestas JSON reales obtenidas en TASK-018 y confirmar que no hay campos divergentes.
 
-### [ ] TASK-020 Contrato: configuración - fichero de configuración del histórico
+### [x] TASK-020 Contrato: configuración - fichero de configuración del histórico
 
 - **Cubre:** REQ-005, REQ-008, NFR-001, NFR-003, SUP-001, SUP-002, DEC-001, DEC-005
 - **Componente:** config-historico | config/historico.yaml
