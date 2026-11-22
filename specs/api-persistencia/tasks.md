@@ -347,7 +347,7 @@ La ingesta y la purga conviven en el mismo proceso FastAPI que el planificador d
   1. Revisar que la fila de contrato (configuración de la persistencia) queda descrita con el mismo formato que usa el fichero real.
   2. Modificar el fichero siguiendo solo el formato documentado y comprobar que la aplicación arranca con la nueva configuración.
 
-### [ ] TASK-017 Actualización del mapa de arquitectura
+### [X] TASK-017 Actualización del mapa de arquitectura
 
 - **Cubre:** DEC-001, DEC-002, DEC-003, DEC-004, DEC-005, DEC-006, DEC-007, DEC-008
 - **Componente:** api-service | source/api
