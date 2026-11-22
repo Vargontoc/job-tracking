@@ -28,7 +28,7 @@ Los componentes del histórico son detalle de implementación interno del módul
 
 ## Tareas
 
-### [ ] TASK-001 Estructura del paquete del histórico y dependencias
+### [x] TASK-001 Estructura del paquete del histórico y dependencias
 
 - **Cubre:** REQ-001, REQ-010, SUP-002, DEC-001, DEC-003
 - **Componente:** api-historico | source/api/historico
@@ -44,7 +44,7 @@ Los componentes del histórico son detalle de implementación interno del módul
 - **Prueba manual:**
   1. Instalar el proyecto en un entorno virtual limpio y ejecutar la suite de pruebas: termina sin fallos por dependencias ausentes.
 
-### [ ] TASK-002 Fichero de configuración del histórico
+### [x] TASK-002 Fichero de configuración del histórico
 
 - **Cubre:** REQ-005, REQ-008, NFR-001, NFR-003, SUP-001, DEC-001, DEC-005
 - **Componente:** config-historico | config/historico.yaml
@@ -98,7 +98,7 @@ Los componentes del histórico son detalle de implementación interno del módul
   1. Migrar un fichero desde cero y revisar el esquema resultante con una herramienta de inspección de SQLite: tablas, columnas e índices.
   2. Arrancar dos veces seguidas y comprobar que la segunda vez no se reejecuta ninguna migración.
 
-### [ ] TASK-005 Repositorio de presencia en listado y serie de recuentos
+### [x] TASK-005 Repositorio de presencia en listado y serie de recuentos
 
 - **Cubre:** REQ-005, REQ-008, REQ-011, NFR-003, SUP-003, DEC-001, DEC-005, ALT-007
 - **Componente:** historico-presencia-repository | source/api/historico/presencia_repository.py
@@ -134,7 +134,7 @@ Los componentes del histórico son detalle de implementación interno del módul
 - **Prueba manual:**
   1. Registrar tres abstenciones con motivos distintos y consultarlas: comprobar el orden y que cada una conserva sus datos.
 
-### [ ] TASK-007 Repositorio de ejecución diaria
+### [x] TASK-007 Repositorio de ejecución diaria
 
 - **Cubre:** REQ-011, NFR-002, SUP-003, DEC-001, ALT-006
 - **Componente:** ejecucion-repository | source/api/historico/ejecucion_repository.py

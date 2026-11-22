@@ -1,0 +1,82 @@
+# Configuración del histórico de altas y cierres de ofertas.
+#
+# Formato:
+# - La raíz debe ser un mapa YAML. Un YAML malformado, vacío o cuya raíz no
+#   sea un mapa se rechaza con un error controlado.
+# - Si el fichero no existe, la carga devuelve los valores por defecto.
+# - Los submapas (rutas, buscador, persistencia, pdf) son opcionales: un
+#   submapa ausente equivale a un submapa vacío, y sus campos toman entonces
+#   sus valores por defecto.
+# - Todos los campos son opcionales: los que faltan toman su valor por defecto.
+# - Un submapa presente con un valor que no sea un mapa se rechaza con un
+#   error controlado que identifica el submapa problemático.
+# - Un campo con un tipo incorrecto se rechaza con un error controlado que
+#   identifica el campo. Los campos enteros no admiten booleanos.
+# - La zona horaria se valida con zoneinfo.ZoneInfo; una zona inválida se
+#   rechaza con un error controlado (NFR-001).
+#
+# Campos de nivel superior:
+#   zona_horaria: zona horaria IANA para todas las operaciones del histórico
+#     (NFR-001). Por defecto: "Europe/Madrid".
+#   hora_ejecucion: hora del día (0-23) en la que se ejecuta el cierre diario.
+#     Debe ser posterior a la pasada del buscador (01:00). Por defecto: 2.
+#   ausencias_consecutivas: número de listados consecutivos sin un código para
+#     que se considere desaparecido (NFR-003). Por defecto: 2.
+#   umbral_caida_pct: porcentaje de caída del recuento del listado respecto al
+#     anterior por encima del cual se abstiene el cierre por desaparición
+#     (REQ-008). Por defecto: 30.
+#   recuento_minimo: recuento mínimo del listado por debajo del cual se
+#     abstiene el cierre por desaparición (REQ-008). Por defecto: 70.
+#
+# Submapa `rutas`:
+#   sqlite_historico: ruta al fichero SQLite propio del histórico. Relativa a
+#     la raíz del proyecto. Por defecto: "data/job_emcan_historico.db".
+#   sqlite_persistencia: ruta al fichero SQLite de api-persistencia que se
+#     leerá en modo solo lectura (DEC-006). Relativa a la raíz del proyecto.
+#     Por defecto: "data/job_emcan.db".
+#
+# Submapa `buscador`:
+#   url_base: URL base para consultar GET /buscador/status. Por defecto:
+#     "http://localhost:8000".
+#
+# Submapa `persistencia`:
+#   url_base: URL base para consultar persistencia-api. Por defecto:
+#     "http://localhost:8000".
+#
+# Submapa `pdf`:
+#   comunidad: nombre de la comunidad autónoma del PDF de difusión. Por
+#     defecto: "Cantabria".
+#   identificador: identificador de la comunidad usado en el PDF. Por defecto:
+#     "cantabria".
+#
+# Valores por defecto (si el campo o el submapa faltan):
+#   zona_horaria = "Europe/Madrid", hora_ejecucion = 2,
+#   ausencias_consecutivas = 2, umbral_caida_pct = 30, recuento_minimo = 70,
+#   rutas.sqlite_historico = "data/job_emcan_historico.db",
+#   rutas.sqlite_persistencia = "data/job_emcan.db",
+#   buscador.url_base = "http://localhost:8000",
+#   persistencia.url_base = "http://localhost:8000",
+#   pdf.comunidad = "Cantabria", pdf.identificador = "cantabria".
+#
+# Esta configuración NO contiene rutas de servidor de base de datos ni
+# credenciales. SQLite es un fichero local único con WAL.
+
+zona_horaria: "Europe/Madrid"
+hora_ejecucion: 2
+ausencias_consecutivas: 2
+umbral_caida_pct: 30
+recuento_minimo: 70
+
+rutas:
+  sqlite_historico: "data/job_emcan_historico.db"
+  sqlite_persistencia: "data/job_emcan.db"
+
+buscador:
+  url_base: "http://localhost:8000"
+
+persistencia:
+  url_base: "http://localhost:8000"
+
+pdf:
+  comunidad: "Cantabria"
+  identificador: "cantabria"
