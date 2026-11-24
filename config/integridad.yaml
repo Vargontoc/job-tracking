@@ -1,0 +1,87 @@
+# Contrato de configuración: comprobación diaria de integridad del PDF de difusión.
+#
+# Formato:
+# - La raíz debe ser un mapa YAML. Un YAML malformado, vacío o cuya raíz no
+#   sea un mapa se rechaza con un error controlado.
+# - Si el fichero no existe, la carga devuelve los valores por defecto y toma
+#   las comunidades de `config/comunidades.yaml`.
+# - Los submapas (rutas, buscador) son opcionales: un submapa ausente equivale
+#   a un submapa vacío, y sus campos toman entonces sus valores por defecto.
+# - Todos los campos son opcionales: los que faltan toman su valor por defecto.
+# - Un submapa presente con un valor que no sea un mapa se rechaza con un
+#   error controlado que identifica el submapa problemático.
+# - Un campo con un tipo incorrecto se rechaza con un error controlado que
+#   identifica el campo. Los campos enteros no admiten booleanos: `true` y
+#   `false` no son enteros válidos.
+# - La zona horaria se valida con zoneinfo.ZoneInfo; una zona inválida se
+#   rechaza con un error controlado (NFR-004).
+# - Las rutas son relativas a la raíz del proyecto.
+#
+# Campos de nivel superior:
+#   zona_horaria: zona horaria IANA para determinar el día actual (NFR-004).
+#     Por defecto: "Europe/Madrid".
+#   hora_ejecucion: hora entera del día (0-23) a la que se ejecuta la
+#     comprobación diaria. Por defecto: 2 (02:00), posterior a la pasada del
+#     buscador configurada a la 01:00 en `config/buscador.yaml` (NFR-001). No
+#     se admiten listas de horas, minutos, fracciones de hora ni expresiones
+#     cron.
+#   margen_catchup: minutos de margen para recuperar el día en curso al
+#     arrancar dentro de la ventana entre `hora_ejecucion` y
+#     `hora_ejecucion + margen_catchup` (DEC-007). Entero >= 0. Por defecto:
+#     60.
+#   dias_retencion: días que se conservan los PDFs de difusión y sus metadatos
+#     (REQ-002). Entero >= 0. Por defecto: 30.
+#   tolerancia_absoluta: diferencia absoluta máxima de ofertas entre el PDF y
+#     el buscador para considerar los recuentos concordantes (SUP-001). Entero
+#     >= 0. Por defecto: 1.
+#   tolerancia_relativa_pct: diferencia relativa máxima, en porcentaje, entre
+#     el recuento del PDF y `total_listado` (SUP-001). Se aplica la tolerancia
+#     más permisiva de las dos. Entero >= 0. Por defecto: 5.
+#   umbral_cordura: recuento mínimo de ofertas del PDF; por debajo, el
+#     veredicto es siempre `divergente` (NFR-002). Entero >= 0. Por defecto:
+#     70.
+#   comunidades: lista de comunidades a comprobar, con los campos
+#     `identificador` y `url_pdf`. Si no se declara, se reutilizan las
+#     entradas de `config/comunidades.yaml` (la fuente única del mapa de PDFs).
+#
+# Submapa `rutas`:
+#   base_pdfs: ruta base del árbol de PDFs y metadatos, con la disposición
+#     `<base_pdfs>/<comunidad>/<aaaa-mm-dd>.pdf` y su
+#     `<aaaa-mm-dd>.meta.json` asociado (SUP-003). Relativa a la raíz del
+#     proyecto. Por defecto: "data/pdfs".
+#
+# Submapa `buscador`:
+#   url_base: URL base para consultar GET /buscador/status. El cliente le
+#     añade "/buscador/status". Por defecto: "http://localhost:8000".
+#
+# Valores por defecto (si el campo o el submapa faltan):
+#   zona_horaria = "Europe/Madrid", hora_ejecucion = 2, margen_catchup = 60,
+#   dias_retencion = 30, tolerancia_absoluta = 1, tolerancia_relativa_pct = 5,
+#   umbral_cordura = 70, rutas.base_pdfs = "data/pdfs",
+#   buscador.url_base = "http://localhost:8000".
+#
+# Esta configuración NO contiene rutas de servidor de base de datos ni
+# credenciales: el estado del día vive en el `.meta.json` junto a cada PDF y en
+# `data/pdfs/ejecuciones.json`, sin ningún fichero SQLite nuevo.
+#
+# Consumidores: `source/api/integridad/config.py` carga este fichero y
+# `source/api/main.py` aplica sus valores al arrancar la aplicación (zona
+# horaria y hora de la tarea diaria, margen de catch-up, retención, tolerancias,
+# umbral de cordura, ruta base de PDFs, URL base del buscador y comunidades).
+
+zona_horaria: "Europe/Madrid"
+hora_ejecucion: 2
+margen_catchup: 60
+dias_retencion: 30
+tolerancia_absoluta: 1
+tolerancia_relativa_pct: 5
+umbral_cordura: 70
+
+rutas:
+  base_pdfs: "data/pdfs"
+
+buscador:
+  url_base: "http://localhost:8000"
+
+# `comunidades` no se declara: se reutilizan las entradas de
+# `config/comunidades.yaml` para no duplicar el mapa de PDFs de difusión.

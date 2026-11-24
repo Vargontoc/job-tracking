@@ -7,6 +7,19 @@ from fastapi.testclient import TestClient
 
 from source.api.main import app, app_state
 from source.api.buscador.models import ResultadoPasada, OfertaBuscador, ErrorOferta
+from source.api.integridad.task import TareaIntegridad
+
+
+@pytest.fixture(autouse=True)
+def _aislar_tarea_integridad(monkeypatch):
+    """Evita que la tarea de integridad descargue el PDF real o purgue data/pdfs.
+
+    Al arrancar la app real, ``TareaIntegridad.iniciar`` puede adelantar la
+    comprobación del día y descargar el PDF de difusión real o purgar
+    ``data/pdfs``. Se sustituye por una función vacía para que el ``lifespan``
+    no arranque ningún hilo de trabajo.
+    """
+    monkeypatch.setattr(TareaIntegridad, "iniciar", lambda self: None)
 
 
 @pytest.fixture

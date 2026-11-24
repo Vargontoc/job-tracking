@@ -62,6 +62,24 @@ from source.api.historico.pdf_adapter import AdaptadorListadoPDF
 from source.api.historico.task import TareaHistorico
 from source.api.historico.routes import router as historico_router
 
+# Integridad (TASK-014)
+from source.api.integridad.avisos import AlmacenAvisos
+from source.api.integridad.buscador_client import (
+    ClienteEstadoBuscador as ClienteEstadoBuscadorIntegridad,
+)
+from source.api.integridad.comparador import ComparadorRecuentos
+from source.api.integridad.config import (
+    cargar_configuracion as cargar_configuracion_integridad,
+    ErrorConfiguracionIntegridad,
+)
+from source.api.integridad.downloader_adapter import AdaptadorDescarga
+from source.api.integridad.ejecuciones import IndiceEjecuciones
+from source.api.integridad.parser_adapter import AdaptadorParseo
+from source.api.integridad.pdf_store import AlmacenPDFs
+from source.api.integridad.purger import purgar
+from source.api.integridad.routes import router as integridad_router
+from source.api.integridad.task import TareaIntegridad
+
 logger = logging.getLogger(__name__)
 
 
@@ -325,11 +343,94 @@ async def lifespan(app: FastAPI):
             "La app continúa sin el histórico.",
             exc,
         )
-    
+
+    # Parte 4: Integridad (TASK-014) — independiente de buscador, persistencia
+    # e histórico; convive con sus tareas en el mismo proceso (DEC-006).
+    try:
+        # 7.1 Cargar configuración de la integridad
+        config_integridad = cargar_configuracion_integridad()
+        logger.info(
+            "Configuración de la integridad cargada: zona=%s, hora=%02d:00, "
+            "margen=%d min",
+            config_integridad.zona_horaria,
+            config_integridad.hora_ejecucion,
+            config_integridad.margen_catchup,
+        )
+
+        # 7.2 Almacén de PDFs y metadatos del día (sin SQLite, DEC-001)
+        almacen_integridad = AlmacenPDFs(
+            config_integridad.ruta_base_pdfs,
+            config_integridad.zona_horaria,
+        )
+
+        # 7.3 Adaptadores, comparador, avisos e índice de ejecuciones
+        adaptador_descarga = AdaptadorDescarga()
+        adaptador_parseo = AdaptadorParseo()
+        cliente_estado_integridad = ClienteEstadoBuscadorIntegridad(
+            config_integridad.url_base_buscador
+        )
+        comparador_integridad = ComparadorRecuentos(
+            config_integridad.tolerancia_absoluta,
+            config_integridad.tolerancia_relativa_pct,
+            config_integridad.umbral_cordura,
+        )
+        almacen_avisos = AlmacenAvisos(almacen_integridad)
+        indice_ejecuciones = IndiceEjecuciones(
+            config_integridad.ruta_base_pdfs,
+            config_integridad.zona_horaria,
+        )
+
+        # 7.4 Instanciar y arrancar la tarea diaria de integridad
+        tarea_integridad = TareaIntegridad(
+            config=config_integridad,
+            almacen=almacen_integridad,
+            adaptador_descarga=adaptador_descarga,
+            adaptador_parseo=adaptador_parseo,
+            cliente_buscador=cliente_estado_integridad,
+            comparador=comparador_integridad,
+            avisos=almacen_avisos,
+            ejecuciones=indice_ejecuciones,
+            purger=purgar,
+        )
+        tarea_integridad.iniciar()
+        logger.info("Tarea de integridad arrancada")
+
+        # 7.5 Guardar referencias en app_state
+        app_state["config_integridad"] = config_integridad
+        app_state["almacen_integridad"] = almacen_integridad
+        app_state["indice_ejecuciones"] = indice_ejecuciones
+        app_state["tarea_integridad"] = tarea_integridad
+
+        logger.info("Integridad inicializada correctamente")
+
+    except ErrorConfiguracionIntegridad as exc:
+        logger.error(
+            "Error de configuración de la integridad: %s. "
+            "La app continúa sin la integridad.",
+            exc,
+        )
+        app_state["tarea_integridad"] = None
+    except Exception as exc:
+        logger.error(
+            "Error inesperado al inicializar la integridad: %s. "
+            "La app continúa sin la integridad.",
+            exc,
+        )
+        app_state["tarea_integridad"] = None
+
     yield
     
     # === SHUTDOWN ===
-    # 1. Detener tareas de persistencia PRIMERO (antes de cerrar conexión)
+    # 1. Detener la tarea de integridad PRIMERO: se detiene antes que las demás
+    #    tareas, las conexiones SQLite y el scheduler del buscador (DEC-006).
+    tarea_integridad = app_state.get("tarea_integridad")
+    if tarea_integridad is not None:
+        try:
+            tarea_integridad.detener()
+        except Exception as e:
+            logger.error(f"Error al detener tarea de integridad: {e}")
+
+    # 2. Detener tareas de persistencia (antes de cerrar conexión)
     tarea_ingesta = app_state.get("tarea_ingesta")
     if tarea_ingesta is not None:
         try:
@@ -344,7 +445,7 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error(f"Error al detener tarea de purga: {e}")
 
-    # 2. Detener tarea del histórico (antes del scheduler y de cerrar su conexión)
+    # 3. Detener tarea del histórico (antes del scheduler y de cerrar su conexión)
     tarea_historico = app_state.get("tarea_historico")
     if tarea_historico is not None:
         try:
@@ -352,7 +453,7 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error(f"Error al detener tarea del histórico: {e}")
 
-    # 3. Cerrar conexión SQLite del histórico
+    # 4. Cerrar conexión SQLite del histórico
     conexion_historico = app_state.get("conexion_historico")
     if conexion_historico is not None:
         try:
@@ -361,7 +462,7 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error(f"Error al cerrar conexión del histórico: {e}")
 
-    # 4. Cerrar conexión SQLite de persistencia
+    # 5. Cerrar conexión SQLite de persistencia
     conexion_persistencia = app_state.get("conexion_persistencia")
     if conexion_persistencia is not None:
         try:
@@ -370,7 +471,7 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error(f"Error al cerrar conexión SQLite: {e}")
 
-    # 5. Detener scheduler del buscador
+    # 6. Detener scheduler del buscador
     scheduler = app_state.get("scheduler")
     if scheduler is not None:
         try:
@@ -403,6 +504,9 @@ app.include_router(persistencia_router)
 
 # Registrar rutas del histórico (TASK-016)
 app.include_router(historico_router)
+
+# Registrar rutas de la integridad (TASK-014)
+app.include_router(integridad_router)
 
 
 @app.get("/health")

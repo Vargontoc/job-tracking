@@ -74,6 +74,11 @@ def _aplicar_parches(monkeypatch, entorno):
     monkeypatch.setattr(Scheduler, "iniciar", lambda self: None)
     monkeypatch.setattr(Scheduler, "detener", lambda self: None)
 
+    # Evitar que la tarea de integridad descargue el PDF real o purgue data/pdfs:
+    # al arrancar puede adelantar la comprobación del día y tocar el disco real.
+    from source.api.integridad.task import TareaIntegridad
+    monkeypatch.setattr(TareaIntegridad, "iniciar", lambda self: None)
+
 
 @pytest.fixture
 def app_lista(tmp_path, monkeypatch):
@@ -245,6 +250,10 @@ class TestSeenCodesCorrupto:
         from source.api.buscador.scheduler import Scheduler
         monkeypatch.setattr(Scheduler, "iniciar", lambda self: None)
         monkeypatch.setattr(Scheduler, "detener", lambda self: None)
+
+        # Evitar que la tarea de integridad descargue el PDF real o purgue data/pdfs
+        from source.api.integridad.task import TareaIntegridad
+        monkeypatch.setattr(TareaIntegridad, "iniciar", lambda self: None)
 
         import importlib
         import source.api.main as main_mod

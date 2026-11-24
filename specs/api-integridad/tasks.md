@@ -28,7 +28,7 @@ Los componentes de la integridad son detalle de implementación interno del mód
 
 ## Tareas
 
-### [ ] TASK-001 Estructura del paquete de la integridad y dependencias
+### [x] TASK-001 Estructura del paquete de la integridad y dependencias
 
 - **Cubre:** REQ-001, REQ-002, SUP-003, SUP-005, DEC-001, DEC-003
 - **Componente:** integridad-task | source/api/integridad
@@ -45,7 +45,7 @@ Los componentes de la integridad son detalle de implementación interno del mód
 - **Prueba manual:**
   1. Instalar el proyecto en un entorno virtual limpio y ejecutar la suite de pruebas: termina sin fallos por dependencias ausentes.
 
-### [ ] TASK-002 Fichero de configuración de la integridad
+### [x] TASK-002 Fichero de configuración de la integridad
 
 - **Cubre:** REQ-001, REQ-002, REQ-003, NFR-001, NFR-002, NFR-004, SUP-001, SUP-003, DEC-001, DEC-005, DEC-007
 - **Componente:** config-integridad | config/integridad.yaml
@@ -66,7 +66,7 @@ Los componentes de la integridad son detalle de implementación interno del mód
   1. Abrir `config/integridad.yaml` y comprobar que contiene los campos con sus valores por defecto.
   2. Cambiar la hora a `5` y el margen de catch-up a `30`, recargar la configuración y comprobar que los nuevos valores son los que se aplican.
 
-### [ ] TASK-003 Almacén de PDFs y de metadatos del día
+### [x] TASK-003 Almacén de PDFs y de metadatos del día
 
 - **Cubre:** REQ-002, REQ-005, NFR-003, SUP-001, SUP-003, DEC-001, DEC-002, DEC-003, ALT-003, ALT-007
 - **Componente:** pdf-store | source/api/integridad/pdf_store.py
@@ -87,7 +87,7 @@ Los componentes de la integridad son detalle de implementación interno del mód
 - **Prueba manual:**
   1. Guardar un PDF de prueba y revisar `data/pdfs/<comunidad>/`: aparecen el PDF y el `.meta.json` con el hash, y no queda ningún fichero temporal.
 
-### [ ] TASK-004 PDF huérfano y listado de PDFs conservados
+### [x] TASK-004 PDF huérfano y listado de PDFs conservados
 
 - **Cubre:** REQ-002, REQ-005, REQ-009, SUP-003, DEC-002, ALT-007
 - **Componente:** pdf-store | source/api/integridad/pdf_store.py
@@ -105,7 +105,7 @@ Los componentes de la integridad son detalle de implementación interno del mód
 - **Prueba manual:**
   1. Colocar un PDF suelto sin `.meta.json` en el directorio de una comunidad y ejecutar el listado: aparece como PDF conservado y se informa del día incompleto.
 
-### [ ] TASK-005 Purga de PDFs por la fecha del nombre
+### [x] TASK-005 Purga de PDFs por la fecha del nombre
 
 - **Cubre:** REQ-002, SUP-003, DEC-002, DEC-004
 - **Componente:** pdf-purger | source/api/integridad/purger.py
@@ -126,7 +126,7 @@ Los componentes de la integridad son detalle de implementación interno del mód
 - **Prueba manual:**
   1. Preparar PDFs con nombres de hace 40, 30 y 5 días y ejecutar la purga: solo desaparece el de 40 días.
 
-### [ ] TASK-006 Adaptador de descarga del PDF de difusión
+### [x] TASK-006 Adaptador de descarga del PDF de difusión
 
 - **Cubre:** REQ-001, REQ-002, SUP-003, SUP-005, DEC-002, ALT-003
 - **Componente:** downloader-adapter | source/api/integridad/downloader_adapter.py
@@ -144,7 +144,7 @@ Los componentes de la integridad son detalle de implementación interno del mód
 - **Prueba manual:**
   1. Invocar el adaptador con la URL real del PDF de difusión y comprobar que devuelve los bytes y que en el registro no aparece ninguna petición a `/parse`.
 
-### [ ] TASK-007 Adaptador de parseo del PDF de difusión
+### [x] TASK-007 Adaptador de parseo del PDF de difusión
 
 - **Cubre:** REQ-003, REQ-004, SUP-003, SUP-005, DEC-002, ALT-004
 - **Componente:** parser-adapter | source/api/integridad/parser_adapter.py
@@ -161,7 +161,7 @@ Los componentes de la integridad son detalle de implementación interno del mód
 - **Prueba manual:**
   1. Invocar el adaptador con el PDF real de difusión y comprobar que devuelve un recuento cercano a 92 ofertas, el valor observado el 10/11/2026.
 
-### [ ] TASK-008 Adaptador del estado del buscador
+### [x] TASK-008 Adaptador del estado del buscador
 
 - **Cubre:** REQ-003, REQ-006, SUP-004, SUP-006, DEC-005, ALT-005, ALT-006
 - **Componente:** buscador-status-adapter | source/api/integridad/buscador_client.py
@@ -180,7 +180,7 @@ Los componentes de la integridad son detalle de implementación interno del mód
 - **Prueba manual:**
   1. Con la aplicación arrancada, consultar el adaptador contra `http://localhost:8000` y comprobar que devuelve el mismo `total_listado` que muestra `GET /buscador/status`.
 
-### [ ] TASK-009 Comparador de recuentos y emisión del veredicto
+### [x] TASK-009 Comparador de recuentos y emisión del veredicto
 
 - **Cubre:** REQ-003, REQ-004, REQ-006, NFR-002, SUP-001, SUP-006, DEC-005, ALT-004, ALT-005, ALT-006
 - **Componente:** comparador-veredicto | source/api/integridad/comparador.py
@@ -202,7 +202,7 @@ Los componentes de la integridad son detalle de implementación interno del mód
 - **Prueba manual:**
   1. Comparar el par `92`/`93` y después el par `65`/`93` y comprobar que el primer caso es `concordante` y el segundo `divergente` por el umbral.
 
-### [ ] TASK-010 Almacén de avisos de fallo y divergencia
+### [x] TASK-010 Almacén de avisos de fallo y divergencia
 
 - **Cubre:** REQ-007, REQ-008, SUP-007, DEC-001, DEC-002, ALT-003, ALT-006
 - **Componente:** avisos-store | source/api/integridad/avisos.py
@@ -221,7 +221,7 @@ Los componentes de la integridad son detalle de implementación interno del mód
 - **Prueba manual:**
   1. Provocar una divergencia y revisar la entrada de avisos del `.meta.json` del día: aparecen fecha, recuentos, diferencia, umbral y motivo.
 
-### [ ] TASK-011 Índice de ejecuciones del último mes
+### [x] TASK-011 Índice de ejecuciones del último mes
 
 - **Cubre:** REQ-005, REQ-008, REQ-009, NFR-001, NFR-004, DEC-001, ALT-008
 - **Componente:** avisos-store | source/api/integridad/ejecuciones.py
@@ -242,7 +242,7 @@ Los componentes de la integridad son detalle de implementación interno del mód
 - **Prueba manual:**
   1. Registrar dos ejecuciones simuladas y consultar las del último mes: aparecen las dos ordenadas de más reciente a más antigua.
 
-### [ ] TASK-012 Tarea programada diaria de integridad
+### [x] TASK-012 Tarea programada diaria de integridad
 
 - **Componente:** integridad-task | source/api/integridad/task.py
 - **Módulo:** APP
@@ -265,7 +265,7 @@ Los componentes de la integridad son detalle de implementación interno del mód
 - **Prueba manual:**
   1. Arrancar la tarea con el reloj controlado a la hora configurada y comprobar que se ejecuta una vez y que una segunda ejecución del mismo día no vuelve a descargar el PDF.
 
-### [ ] TASK-013 Recuperación del día en curso con margen de catch-up
+### [x] TASK-013 Recuperación del día en curso con margen de catch-up
 
 - **Cubre:** REQ-001, REQ-005, NFR-001, NFR-003, DEC-007, ALT-009
 - **Componente:** integridad-task | source/api/integridad/task.py
@@ -286,7 +286,7 @@ Los componentes de la integridad son detalle de implementación interno del mód
 - **Prueba manual:**
   1. Arrancar la aplicación dentro de la ventana de margen y comprobar que no se ejecuta de inmediato y que a `hora + margen` se ejecuta una sola vez.
 
-### [ ] TASK-014 Arranque y apagado de la integridad en la aplicación
+### [x] TASK-014 Arranque y apagado de la integridad en la aplicación
 
 - **Cubre:** REQ-001, REQ-006, NFR-001, NFR-004, SUP-002, SUP-003, DEC-001, DEC-006, ALT-009
 - **Componente:** api-service | source/api
@@ -307,7 +307,7 @@ Los componentes de la integridad son detalle de implementación interno del mód
   1. Arrancar la aplicación y comprobar que la tarea de la integridad queda programada junto a las demás tareas del proceso.
   2. Detener la aplicación y comprobar que no queda viva ninguna tarea de la integridad.
 
-### [ ] TASK-015 Endpoint del último veredicto de integridad
+### [x] TASK-015 Endpoint del último veredicto de integridad
 
 - **Cubre:** REQ-006, REQ-009, SUP-002, SUP-006, DEC-001, DEC-005, ALT-008
 - **Componente:** integridad-api | source/api/integridad/routes.py
@@ -328,7 +328,7 @@ Los componentes de la integridad son detalle de implementación interno del mód
 - **Prueba manual:**
   1. Consultar el endpoint con un día `divergente` y con un día `concordante` y comprobar que la recomendación de cierre cambia en consecuencia.
 
-### [ ] TASK-016 Endpoint de las ejecuciones del último mes
+### [x] TASK-016 Endpoint de las ejecuciones del último mes
 
 - **Cubre:** REQ-008, REQ-009, SUP-002, SUP-007, DEC-001
 - **Componente:** integridad-api | source/api/integridad/routes.py
@@ -348,7 +348,7 @@ Los componentes de la integridad son detalle de implementación interno del mód
 - **Prueba manual:**
   1. Consultar el endpoint con un índice de ejecuciones de prueba y comprobar que devuelve solo las ejecuciones del último mes con sus avisos.
 
-### [ ] TASK-017 Endpoint de los PDFs conservados
+### [x] TASK-017 Endpoint de los PDFs conservados
 
 - **Cubre:** REQ-002, REQ-009, SUP-003, DEC-001, DEC-004
 - **Componente:** integridad-api | source/api/integridad/routes.py
@@ -368,7 +368,7 @@ Los componentes de la integridad son detalle de implementación interno del mód
 - **Prueba manual:**
   1. Consultar el endpoint con varios PDFs conservados y comprobar que fecha, comunidad y ruta son correctos en cada elemento.
 
-### [ ] TASK-018 Verificación de integración de la integridad
+### [x] TASK-018 Verificación de integración de la integridad
 
 - **Cubre:** REQ-001, REQ-002, REQ-003, REQ-004, REQ-005, REQ-006, REQ-007, REQ-008, REQ-009, NFR-001, NFR-002, NFR-003, NFR-004, SUP-001, SUP-003, SUP-004, SUP-005, SUP-007, DEC-001, DEC-002, DEC-003, DEC-004, DEC-005, DEC-006, DEC-007, ALT-001, ALT-002, ALT-003, ALT-004, ALT-005, ALT-006, ALT-007, ALT-008, ALT-009
 - **Componente:** api-service | source/api
@@ -394,7 +394,7 @@ Los componentes de la integridad son detalle de implementación interno del mód
   1. Ejecutar la prueba de integración y revisar el informe: todos los escenarios salen con el resultado esperado.
   2. Revisar el directorio de datos tras la prueba: aparecen los PDFs y los `.meta.json` esperados, sin ficheros SQLite nuevos.
 
-### [ ] TASK-019 Contrato: openapi - endpoints de consulta de la integridad
+### [x] TASK-019 Contrato: openapi - endpoints de consulta de la integridad
 
 - **Cubre:** REQ-006, REQ-009, SUP-002, SUP-007, DEC-001, DEC-005
 - **Componente:** integridad-api | source/api/integridad/routes.py
@@ -413,7 +413,7 @@ Los componentes de la integridad son detalle de implementación interno del mód
   1. Revisar el contrato y comprobar que aparecen las tres interfaces de la fila de contratos afectados.
   2. Comparar el contrato con las respuestas JSON reales obtenidas en TASK-018 y confirmar que no hay campos divergentes.
 
-### [ ] TASK-020 Contrato: configuración - fichero de configuración de la integridad
+### [x] TASK-020 Contrato: configuración - fichero de configuración de la integridad
 
 - **Cubre:** REQ-001, REQ-002, REQ-003, NFR-001, NFR-002, NFR-004, SUP-001, SUP-003, DEC-005, DEC-007
 - **Componente:** config-integridad | config/integridad.yaml

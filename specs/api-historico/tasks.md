@@ -377,7 +377,7 @@ Los componentes del histórico son detalle de implementación interno del módul
   1. Ejecutar la prueba de integración y revisar el informe: todos los escenarios salen con el resultado esperado.
   2. Revisar el directorio `data/` tras la prueba: aparecen el fichero SQLite propio del histórico y el de persistencia, sin modificaciones en el segundo.
 
-### [ ] TASK-019 Contrato: openapi - endpoints de consulta del histórico
+### [X] TASK-019 Contrato: openapi - endpoints de consulta del histórico
 
 - **Cubre:** REQ-001, REQ-002, REQ-012, SUP-002, SUP-003, DEC-006
 - **Componente:** historico-api | source/api/historico/routes.py

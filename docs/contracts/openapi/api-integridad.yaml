@@ -1,0 +1,695 @@
+# Origen: specs/api-integridad (REQ-006, REQ-009, SUP-002, SUP-007, DEC-001, DEC-005)
+# Estado del contrato: contrastado con el código
+#
+# Las tres operaciones se sirven desde `integridad-api`
+# (`source/api/integridad/routes.py`), cuyo router es
+# `APIRouter(prefix="/integridad", tags=["integridad"])`. Las rutas y los campos
+# de este contrato coinciden con los modelos Pydantic de salida del router y con
+# las respuestas JSON verificadas en la prueba de integración de TASK-018.
+#
+# El veredicto es **informativo**: no bloquea ni modifica los cierres de
+# `api-historico` (REQ-006, SUP-002). Los tres endpoints son de solo lectura
+# (no escriben ni borran ficheros y no tocan `data/job_emcan.db`), no exigen
+# autenticación, como el resto de la API, y no exponen ningún canal de
+# notificación externo: los avisos son registros consultables dentro del
+# sistema (SUP-007).
+openapi: 3.1.0
+info:
+  title: Job Emcan Tracking API - Integridad del PDF de difusión
+  version: 1.0.0
+  description: >-
+    API de consulta del estado de la comprobación diaria de integridad entre el
+    PDF de difusión y el recuento publicado por el buscador. Expone el último
+    veredicto con su recomendación de cierre, las ejecuciones de la ventana de
+    30 días con sus avisos y los PDFs conservados en el árbol de metadatos
+    (REQ-006, REQ-009).
+
+    No exige autenticación, como el resto de la API: las tres operaciones
+    responden `200` sin cabeceras de autenticación y nunca devuelven `401` ni
+    `403`.
+
+    El veredicto es **informativo** (REQ-006, SUP-002): indica si los cierres del
+    día están recomendados, pero no bloquea ni modifica por sí mismo los
+    cierres de `api-historico`. El cumplimiento completo de FUN-014 queda a
+    expensas de que un consumidor futuro actúe sobre el veredicto.
+
+    No hay ningún canal de notificación externo (SUP-007): los avisos de
+    divergencia o de fallo son registros consultables que la API devuelve
+    dentro de las ejecuciones, y no se envían por Telegram, correo ni ningún
+    otro canal.
+
+    Convenciones de datos:
+    - `fecha` es una fecha ISO `YYYY-MM-DD`. El día se determina con la zona
+      horaria configurada en `config/integridad.yaml` (`Europe/Madrid` por
+      defecto), no con la del sistema (NFR-004).
+    - `timestamp` es una marca ISO 8601 con desplazamiento horario, generada en
+      la misma zona configurada.
+    - Los tres veredictos posibles son `concordante`, `divergente` y `fallido`.
+      El veredicto global es el más grave entre las comunidades del día:
+      `fallido` > `divergente` > `concordante` (ALT-008).
+    - Los recuentos, la diferencia y los umbrales son `null` cuando no se
+      pudieron determinar: un día `fallido` no tiene recuento del PDF y un día
+      `divergente` por falta de datos del buscador no tiene `total_listado`.
+    - `ruta` es siempre **relativa a la ruta base** del árbol de PDFs
+      (`<comunidad>/<aaaa-mm-dd>.pdf`): nunca se expone una ruta absoluta del
+      sistema (SUP-003).
+    - Las tres operaciones son de solo lectura: no escriben ni borran ningún
+      fichero y no modifican `data/job_emcan.db`.
+    - Un `.meta.json` ilegible se omite sin error y un índice de ejecuciones
+      ausente o ilegible devuelve una lista vacía sin error.
+
+    Convive en el mismo proceso con los endpoints del buscador
+    (`api-buscador.yaml`), de persistencia (`api-persistencia.yaml`), del
+    histórico (`api-historico.yaml`) y del parseo de PDF
+    (`api-pdf-parser.yaml`).
+paths:
+  /integridad/ultimo:
+    get:
+      operationId: consultarUltimoVeredictoIntegridad
+      summary: Consultar el último veredicto de integridad
+      description: >-
+        Devuelve el veredicto del día más reciente almacenado en los
+        `.meta.json` del árbol de PDFs, con el veredicto global y el desglose
+        por comunidad (REQ-009). La fecha es la máxima entre los días con
+        metadatos legibles; a igualdad de fecha, el orden del desglose lo
+        marca la última ejecución del índice que referencia ese día y, sin
+        índice, se ordena por comunidad.
+
+        `cierre_recomendado` es `true` **solo** si el veredicto global es
+        `concordante` y corresponde a hoy en la zona configurada. Un veredicto
+        `divergente` o `fallido`, o la ausencia de veredicto de hoy, lo dejan
+        en `false` (REQ-006).
+
+        Sin ningún `.meta.json` legible la respuesta es `200` con `fecha` y
+        `veredicto_global` en `null`, `cierre_recomendado` en `false` y
+        `comunidades` vacía. Los `.meta.json` ilegibles se omiten sin error.
+
+        El veredicto es informativo: la respuesta no bloquea ni modifica los
+        cierres de `api-historico` (REQ-006, SUP-002).
+      tags:
+        - integridad
+      responses:
+        '200':
+          description: >-
+            Último veredicto almacenado con su recomendación de cierre y el
+            desglose por comunidad.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespuestaUltimoVeredicto'
+              examples:
+                concordanteDeHoy:
+                  summary: Veredicto concordante de hoy
+                  value:
+                    fecha: '2026-11-23'
+                    veredicto_global: concordante
+                    cierre_recomendado: true
+                    comunidades:
+                      - fecha: '2026-11-23'
+                        comunidad: cantabria
+                        recuento_pdf: 92
+                        recuento_buscador: 93
+                        diferencia: 1
+                        tolerancia_absoluta: 1
+                        tolerancia_relativa_pct: 5
+                        umbral_cordura: 70
+                        veredicto: concordante
+                divergente:
+                  summary: Veredicto divergente con dos comunidades
+                  value:
+                    fecha: '2026-11-23'
+                    veredicto_global: divergente
+                    cierre_recomendado: false
+                    comunidades:
+                      - fecha: '2026-11-23'
+                        comunidad: cantabria
+                        recuento_pdf: 92
+                        recuento_buscador: 93
+                        diferencia: 1
+                        tolerancia_absoluta: 1
+                        tolerancia_relativa_pct: 5
+                        umbral_cordura: 70
+                        veredicto: concordante
+                      - fecha: '2026-11-23'
+                        comunidad: asturias
+                        recuento_pdf: 80
+                        recuento_buscador: 93
+                        diferencia: 13
+                        tolerancia_absoluta: 1
+                        tolerancia_relativa_pct: 5
+                        umbral_cordura: 70
+                        veredicto: divergente
+                fallido:
+                  summary: Veredicto fallido por fallo de descarga
+                  value:
+                    fecha: '2026-11-23'
+                    veredicto_global: fallido
+                    cierre_recomendado: false
+                    comunidades:
+                      - fecha: '2026-11-23'
+                        comunidad: cantabria
+                        recuento_pdf: null
+                        recuento_buscador: null
+                        diferencia: null
+                        tolerancia_absoluta: null
+                        tolerancia_relativa_pct: null
+                        umbral_cordura: null
+                        veredicto: fallido
+                sinVeredicto:
+                  summary: Todavía no hay ningún veredicto almacenado
+                  value:
+                    fecha: null
+                    veredicto_global: null
+                    cierre_recomendado: false
+                    comunidades: []
+        '503':
+          description: >-
+            La integridad no está disponible. La API arrancó sin la
+            configuración de la integridad o sin inicializar el almacén de
+            PDFs, de modo que no hay estado que consultar.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorHTTP'
+              examples:
+                integridadNoDisponible:
+                  summary: Integridad no inicializada
+                  value:
+                    detail: >-
+                      La integridad no está disponible. Comprueba la
+                      configuración.
+  /integridad/ejecuciones:
+    get:
+      operationId: consultarEjecucionesIntegridad
+      summary: Consultar las ejecuciones de la integridad del último mes
+      description: >-
+        Devuelve las ejecuciones de la ventana de **30 días**, de la más
+        reciente a la más antigua, con su marca de tiempo, su resultado global,
+        sus errores por comunidad, su veredicto agregado y los avisos
+        registrados en esa ejecución (REQ-008, REQ-009).
+
+        La ventana es inclusiva por los dos extremos: se incluyen las
+        ejecuciones cuya fecha, tomada de su marca de tiempo en la zona
+        configurada, cae entre hoy menos 30 días y hoy.
+
+        Los avisos se leen de los `.meta.json` que la ejecución referencia; cada
+        aviso lleva siempre su `fecha` y su `comunidad`. Un aviso de
+        `divergencia` incluye los dos recuentos, la diferencia, las
+        tolerancias, el umbral de cordura y el motivo; un aviso de `fallo`
+        incluye la comunidad afectada y el motivo (REQ-007). Los `.meta.json`
+        ausentes o ilegibles se omiten sin error.
+
+        Sin índice de ejecuciones, o con un índice ilegible o corrupto, la
+        respuesta es `200` con una lista vacía sin error.
+
+        Los avisos son registros internos consultables: no se envía nada por
+        Telegram ni por ningún otro canal externo (SUP-007).
+      tags:
+        - integridad
+      responses:
+        '200':
+          description: >-
+            Lista de las ejecuciones de la ventana de 30 días, de la más
+            reciente a la más antigua. Cada elemento incluye su marca de
+            tiempo, su resultado global, sus errores por comunidad, su
+            veredicto agregado y sus avisos.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EjecucionIntegridad'
+              examples:
+                ejecucionOk:
+                  summary: Ejecución correcta del último mes
+                  value:
+                    - timestamp: '2026-11-23T02:00:00+01:00'
+                      resultado_global: ok
+                      errores_por_comunidad: []
+                      veredicto_agregado: concordante
+                      avisos: []
+                ejecucionParcial:
+                  summary: Ejecución con errores parciales y un aviso
+                  value:
+                    - timestamp: '2026-11-23T02:00:00+01:00'
+                      resultado_global: parcial
+                      errores_por_comunidad:
+                        - comunidad: cantabria
+                          mensaje: error HTTP 503 al descargar el PDF
+                      veredicto_agregado: fallido
+                      avisos:
+                        - tipo: fallo
+                          fecha: '2026-11-23'
+                          comunidad: cantabria
+                          motivo: error HTTP 503 al descargar el PDF
+                    - timestamp: '2026-11-22T02:00:00+01:00'
+                      resultado_global: ok
+                      errores_por_comunidad: []
+                      veredicto_agregado: concordante
+                      avisos: []
+                sinEjecuciones:
+                  summary: Sin ejecuciones en la ventana
+                  value: []
+        '503':
+          description: >-
+            La integridad no está disponible. La API arrancó sin la
+            configuración de la integridad o sin inicializar el almacén de
+            PDFs, de modo que no hay índice que consultar.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorHTTP'
+              examples:
+                integridadNoDisponible:
+                  summary: Integridad no inicializada
+                  value:
+                    detail: >-
+                      La integridad no está disponible. Comprueba la
+                      configuración.
+  /integridad/pdfs:
+    get:
+      operationId: consultarPdfsConservadosIntegridad
+      summary: Consultar los PDFs conservados
+      description: >-
+        Devuelve un elemento por cada PDF conservado en el árbol de PDFs, con
+        su fecha, su comunidad y su ruta identificable (REQ-009). La ruta es
+        **relativa a la ruta base** del árbol (`<comunidad>/<aaaa-mm-dd>.pdf`);
+        nunca se expone una ruta absoluta del sistema (SUP-003).
+
+        Cuando existe el `.meta.json` del día, el elemento añade el `hash`
+        SHA-256 del PDF, el recuento del PDF, el recuento del buscador y el
+        veredicto (REQ-005). Un PDF sin `.meta.json` (día incompleto) o con un
+        `.meta.json` ilegible se lista igualmente, con esos cuatro campos en
+        `null` y sin error (ALT-007).
+
+        Solo se listan los ficheros que siguen el patrón `<aaaa-mm-dd>.pdf`;
+        cualquier otro nombre se ignora. Sin directorio de PDFs la respuesta
+        es una lista vacía sin error. El listado refleja lo que queda tras la
+        purga por antigüedad (DEC-004).
+      tags:
+        - integridad
+      responses:
+        '200':
+          description: >-
+            Lista de los PDFs conservados, con su fecha, su comunidad, su ruta
+            relativa y, cuando existe su `.meta.json`, el hash, los recuentos
+            y el veredicto.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PdfConservado'
+              examples:
+                conMetadatos:
+                  summary: PDF con su `.meta.json` legible
+                  value:
+                    - fecha: '2026-11-23'
+                      comunidad: cantabria
+                      ruta: cantabria/2026-11-23.pdf
+                      hash: >-
+                        2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+                      recuento_pdf: 92
+                      recuento_buscador: 93
+                      veredicto: concordante
+                sinMetadatos:
+                  summary: PDF huérfano, sin `.meta.json`
+                  value:
+                    - fecha: '2026-11-23'
+                      comunidad: cantabria
+                      ruta: cantabria/2026-11-23.pdf
+                      hash: null
+                      recuento_pdf: null
+                      recuento_buscador: null
+                      veredicto: null
+                sinPdfs:
+                  summary: Sin PDFs conservados
+                  value: []
+        '503':
+          description: >-
+            La integridad no está disponible. La API arrancó sin la
+            configuración de la integridad o sin inicializar el almacén de
+            PDFs, de modo que no hay árbol que listar.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorHTTP'
+              examples:
+                integridadNoDisponible:
+                  summary: Integridad no inicializada
+                  value:
+                    detail: >-
+                      La integridad no está disponible. Comprueba la
+                      configuración.
+components:
+  schemas:
+    RespuestaUltimoVeredicto:
+      type: object
+      description: >-
+        Último veredicto de integridad almacenado, con la recomendación de
+        cierre del día (REQ-006, REQ-009). El veredicto es informativo: no
+        bloquea ni modifica los cierres de `api-historico` (SUP-002).
+      required:
+        - cierre_recomendado
+        - comunidades
+      properties:
+        fecha:
+          type: string
+          format: date
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          description: >-
+            Día del veredicto más reciente, en formato ISO `YYYY-MM-DD`. Es
+            `null` si todavía no hay ningún veredicto almacenado.
+          example: '2026-11-23'
+        veredicto_global:
+          type: string
+          nullable: true
+          description: >-
+            Veredicto global del día: el más grave entre las comunidades
+            (`fallido` > `divergente` > `concordante`, ALT-008). Es `null` si
+            no hay ningún veredicto almacenado.
+          enum:
+            - concordante
+            - divergente
+            - fallido
+          example: concordante
+        cierre_recomendado:
+          type: boolean
+          description: >-
+            Indica si es recomendable cerrar ofertas hoy. Es `true` **solo**
+            si el veredicto global es `concordante` y corresponde a hoy en la
+            zona configurada; un veredicto `divergente` o `fallido`, o la
+            ausencia de veredicto de hoy, lo dejan en `false` (REQ-006).
+          example: true
+        comunidades:
+          type: array
+          description: >-
+            Desglose por comunidad del día más reciente. Un `.meta.json`
+            ilegible se omite sin error.
+          items:
+            $ref: '#/components/schemas/VeredictoComunidad'
+    VeredictoComunidad:
+      type: object
+      description: >-
+        Veredicto de una comunidad para el día más reciente almacenado
+        (REQ-005, REQ-009).
+      required:
+        - fecha
+        - comunidad
+        - veredicto
+      properties:
+        fecha:
+          type: string
+          format: date
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          description: Día del veredicto, en formato ISO `YYYY-MM-DD`.
+          example: '2026-11-23'
+        comunidad:
+          type: string
+          description: >-
+            Identificador de la comunidad, taken del nombre del directorio que
+            guarda su PDF en el árbol.
+          example: cantabria
+        recuento_pdf:
+          type: integer
+          nullable: true
+          description: >-
+            Ofertas extraídas del PDF de difusión. Es `null` si el día falló
+            antes de poder contarlas.
+          example: 92
+        recuento_buscador:
+          type: integer
+          nullable: true
+          description: >-
+            `total_listado` publicado por el buscador en su última pasada. Es
+            `null` si no se conoció, por ejemplo porque el buscador no
+            respondió o su `ultima_pasada` tenía `error_global` (ALT-005,
+            ALT-006).
+          example: 93
+        diferencia:
+          type: integer
+          nullable: true
+          description: >-
+            Diferencia absoluta entre los dos recuentos. Es `null` si falta
+            alguno de los dos.
+          example: 1
+        tolerancia_absoluta:
+          type: integer
+          nullable: true
+          description: >-
+            Tolerancia absoluta aplicada, en ofertas. Es `null` si el día no
+            llegó a compararse.
+          example: 1
+        tolerancia_relativa_pct:
+          type: integer
+          nullable: true
+          description: >-
+            Tolerancia relativa aplicada, en porcentaje sobre el
+            `total_listado`. Es `null` si el día no llegó a compararse.
+          example: 5
+        umbral_cordura:
+          type: integer
+          nullable: true
+          description: >-
+            Umbral de cordura aplicado: recuento mínimo del PDF por debajo del
+            cual el veredicto es siempre `divergente` (NFR-002, ALT-004). Es
+            `null` si el día no llegó a compararse.
+          example: 70
+        veredicto:
+          type: string
+          description: >-
+            Veredicto de la comunidad: `concordante` cuando la diferencia cabe
+            en la tolerancia absoluta **o** en la relativa, aplicando la más
+            permisiva; `divergente` si no cabe en ninguna o si el PDF no
+            alcanza el umbral de cordura; `fallido` si falló la descarga o el
+            parseo (DEC-005, REQ-004).
+          enum:
+            - concordante
+            - divergente
+            - fallido
+          example: concordante
+    EjecucionIntegridad:
+      type: object
+      description: >-
+        Una ejecución del proceso de integridad dentro de la ventana de 30
+        días (REQ-008, REQ-009).
+      required:
+        - timestamp
+        - resultado_global
+        - errores_por_comunidad
+        - veredicto_agregado
+        - avisos
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          description: >-
+            Marca de tiempo ISO 8601 de la ejecución, con desplazamiento
+            horario y generada en la zona horaria configurada (NFR-004).
+          example: '2026-11-23T02:00:00+01:00'
+        resultado_global:
+          type: string
+          description: >-
+            Resultado global de la pasada: `ok` cuando no hubo errores y, por
+            ejemplo, `parcial` cuando alguna comunidad falló.
+          example: ok
+        errores_por_comunidad:
+          type: array
+          description: >-
+            Comunidades que fallaron en esa pasada, con su mensaje de error
+            (REQ-008). Es una lista vacía en una ejecución sin errores.
+          items:
+            $ref: '#/components/schemas/ErrorComunidad'
+        veredicto_agregado:
+          type: string
+          description: >-
+            Veredicto global del día de esa ejecución: el más grave entre las
+            comunidades (`fallido` > `divergente` > `concordante`, ALT-008).
+            Es una cadena vacía si la ejecución no llegó a emitir veredicto.
+          example: concordante
+        avisos:
+          type: array
+          description: >-
+            Avisos registrados en los `.meta.json` que la ejecución referencia
+            (REQ-007). Cada aviso lleva siempre su `fecha` y su `comunidad`; un
+            aviso de `divergencia` incluye los dos recuentos, la diferencia,
+            las tolerancias, el umbral de cordura y el motivo, y uno de
+            `fallo` incluye la comunidad afectada y el motivo. Los
+            `.meta.json` ausentes o ilegibles se omiten sin error. Son
+            registros internos: no se envían por ningún canal externo (SUP-007).
+          items:
+            $ref: '#/components/schemas/AvisoIntegridad'
+    ErrorComunidad:
+      type: object
+      description: >-
+        Error de una comunidad en una ejecución de la integridad (REQ-008).
+      required:
+        - comunidad
+        - mensaje
+      properties:
+        comunidad:
+          type: string
+          description: Identificador de la comunidad afectada.
+          example: cantabria
+        mensaje:
+          type: string
+          description: Motivo del fallo de esa comunidad.
+          example: error HTTP 503 al descargar el PDF
+    AvisoIntegridad:
+      type: object
+      description: >-
+        Aviso consultable de divergencia o de fallo, derivado del `.meta.json`
+        del día (REQ-007). Su forma depende de su `tipo`: el aviso de
+        `divergencia` lleva los recuentos, la diferencia, las tolerancias, el
+        umbral y el motivo; el de `fallo` lleva la comunidad y el motivo.
+        Los campos ausentes en el aviso se omiten de la respuesta.
+      required:
+        - tipo
+      properties:
+        tipo:
+          type: string
+          description: Tipo del aviso registrado en el `.meta.json` del día.
+          enum:
+            - divergencia
+            - fallo
+          example: divergencia
+        fecha:
+          type: string
+          format: date
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          description: >-
+            Día del aviso, en formato ISO `YYYY-MM-DD`. Siempre presente: si
+            el aviso del `.meta.json` no la traía, la API la completa con la
+            fecha del día referenciado.
+          example: '2026-11-23'
+        comunidad:
+          type: string
+          description: >-
+            Comunidad afectada. Siempre presente: si el aviso del `.meta.json`
+            no la traía, la API la completa con la comunidad del día
+            referenciado.
+          example: cantabria
+        recuento_pdf:
+          type: integer
+          nullable: true
+          description: >-
+            Ofertas extraídas del PDF de difusión. Solo en los avisos de
+            `divergencia`.
+          example: 80
+        total_listado:
+          type: integer
+          nullable: true
+          description: >-
+            `total_listado` publicado por el buscador en su última pasada.
+            Solo en los avisos de `divergencia`.
+          example: 93
+        diferencia:
+          type: integer
+          nullable: true
+          description: >-
+            Diferencia absoluta entre los dos recuentos. Solo en los avisos de
+            `divergencia`.
+          example: 13
+        tolerancia_absoluta:
+          type: integer
+          nullable: true
+          description: >-
+            Tolerancia absoluta aplicada, en ofertas. Solo en los avisos de
+            `divergencia`.
+          example: 1
+        tolerancia_relativa_pct:
+          type: integer
+          nullable: true
+          description: >-
+            Tolerancia relativa aplicada, en porcentaje. Solo en los avisos de
+            `divergencia`.
+          example: 5
+        umbral_cordura:
+          type: integer
+          nullable: true
+          description: >-
+            Umbral de cordura aplicado. Solo en los avisos de `divergencia`.
+          example: 70
+        motivo:
+          type: string
+          description: >-
+            Descripción legible de la causa del aviso: la diferencia que
+            supera las tolerancias, el umbral de cordura no alcanzado, el
+            estado del buscador no utilizable o el fallo de descarga o de
+            parseo.
+          example: >-
+            Diferencia de 13 ofertas fuera de la tolerancia absoluta (1) y de
+            la tolerancia relativa (5 % sobre un total_listado de 93).
+    PdfConservado:
+      type: object
+      description: >-
+        Un PDF conservado en el árbol, con la información disponible de sus
+        metadatos (REQ-002, REQ-005, REQ-009).
+      required:
+        - fecha
+        - comunidad
+        - ruta
+      properties:
+        fecha:
+          type: string
+          format: date
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          description: >-
+            Día extraído del nombre `<aaaa-mm-dd>.pdf` del fichero.
+          example: '2026-11-23'
+        comunidad:
+          type: string
+          description: >-
+            Comunidad del directorio que guarda el PDF en el árbol.
+          example: cantabria
+        ruta:
+          type: string
+          description: >-
+            Ruta del PDF conservado **relativa a la ruta base** del árbol
+            (`<comunidad>/<aaaa-mm-dd>.pdf`). Nunca es una ruta absoluta del
+            sistema (SUP-003).
+          example: cantabria/2026-11-23.pdf
+        hash:
+          type: string
+          nullable: true
+          description: >-
+            SHA-256 hexadecimal del contenido del PDF (DEC-003). Es `null` si
+            el `.meta.json` del día no existe o no es legible.
+          example: >-
+            2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+        recuento_pdf:
+          type: integer
+          nullable: true
+          description: >-
+            Ofertas extraídas del PDF de difusión. Es `null` si el
+            `.meta.json` del día no existe o no es legible.
+          example: 92
+        recuento_buscador:
+          type: integer
+          nullable: true
+          description: >-
+            `total_listado` publicado por el buscador el día de ese PDF. Es
+            `null` si el `.meta.json` del día no existe, no es legible o no
+            conoció el recuento del buscador.
+          example: 93
+        veredicto:
+          type: string
+          nullable: true
+          description: >-
+            Veredicto del día de ese PDF. Es `null` si el `.meta.json` del día
+            no existe o no es legible (ALT-007).
+          enum:
+            - concordante
+            - divergente
+            - fallido
+          example: concordante
+    ErrorHTTP:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+          description: Descripción del error de la API.
+          example: >-
+            La integridad no está disponible. Comprueba la configuración.

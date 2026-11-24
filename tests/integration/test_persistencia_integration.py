@@ -205,6 +205,11 @@ def _aplicar_parches(monkeypatch, entorno, estado_mock):
     monkeypatch.setattr(Scheduler, "iniciar", lambda self: None)
     monkeypatch.setattr(Scheduler, "detener", lambda self: None)
 
+    # Evitar que la tarea de integridad descargue el PDF real o purgue data/pdfs:
+    # al arrancar puede adelantar la comprobación del día y tocar el disco real.
+    from source.api.integridad.task import TareaIntegridad
+    monkeypatch.setattr(TareaIntegridad, "iniciar", lambda self: None)
+
     # Parchear ClienteBuscador.consultar_estado con respuesta controlable
     def mock_consultar_estado(self_cliente):
         return estado_mock["respuesta"]

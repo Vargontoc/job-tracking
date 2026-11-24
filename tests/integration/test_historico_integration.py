@@ -133,6 +133,11 @@ def _aplicar_parches(monkeypatch, entorno):
         lambda self: self._evento_parada.wait(timeout=0.05),
     )
 
+    # Evitar que la tarea de integridad descargue el PDF real o purgue data/pdfs:
+    # al arrancar puede adelantar la comprobación del día y tocar el disco real.
+    from source.api.integridad.task import TareaIntegridad
+    monkeypatch.setattr(TareaIntegridad, "iniciar", lambda self: None)
+
 
 @pytest.fixture
 def app_lista(tmp_path, monkeypatch):
