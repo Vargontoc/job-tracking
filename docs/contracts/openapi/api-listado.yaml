@@ -1,0 +1,657 @@
+# Origen: specs/api-listado (REQ-001, REQ-002, REQ-003, REQ-004, REQ-005, REQ-006, REQ-007, REQ-008, REQ-009, NFR-001, SUP-001, SUP-002, SUP-003, DEC-002, DEC-003, DEC-004, DEC-005)
+# Estado del contrato: contrastado con el código
+#
+# Las dos operaciones se sirven desde `listado-api`
+# (`source/api/listado/routes.py`), cuyo router es
+# `APIRouter(prefix="/listado", tags=["listado"])`. Las rutas, los nombres de
+# los parámetros de consulta, los tipos, los valores por defecto y los campos de
+# este contrato coinciden con el router verificado en TASK-011 y con los modelos
+# Pydantic de salida `RespuestaListado`, `OfertaListadoRespuesta`,
+# `RespuestaFiltrosDisponibles` y `FiltroDisponible`.
+#
+# El prefijo `/listado` y los nombres `texto`, `sector`, `municipio`,
+# `fecha_desde`, `fecha_hasta`, `incluir_cerradas`, `offset` y `tamano_pagina`
+# no los fija el diseño (`design@2` los deja como valores por defecto); se
+# confirman aquí contra la implementación, que es la que manda.
+#
+# La lectura es de solo lectura: `listado-read-adapter` abre el SQLite de
+# `api-persistencia` con la URI `file:<ruta>?mode=ro`, comprueba que exista la
+# tabla `ofertas` y cierra la conexión tras cada consulta (DEC-001, REQ-010).
+# No escribe en la base de datos ni crea ficheros.
+openapi: 3.1.0
+info:
+  title: Job Emcan Tracking API - Listado filtrable de ofertas
+  version: 1.0.0
+  description: >-
+    API de consulta del listado de ofertas con filtros combinables, orden por
+    fecha de inicio de difusión descendente y paginación por desplazamiento
+    (REQ-001, REQ-007). Expone el listado paginado `GET /listado` y el
+    descubrimiento de filtros soportados `GET /listado/filtros` (REQ-003,
+    DEC-005). Lee el SQLite de `api-persistencia` en modo **solo lectura
+    (`mode=ro`)** y no escribe nunca en él (DEC-001, REQ-010).
+
+    No exige autenticación, como el resto de la API: las dos operaciones
+    responden `200` sin cabeceras de autenticación y nunca devuelven `401` ni
+    `403`.
+
+    Convenciones de datos:
+    - `codigo` es texto de 12 dígitos, con los ceros por delante, y nunca un
+      número.
+    - `fecha_inicio_difusion` y `fecha_fin_difusion` son fechas en formato
+      `dd/mm/aaaa` (SUP-003, DEC-003). Las fechas de difusión de la oferta
+      se devuelven tal como las guarda `api-persistencia`.
+    - Todos los campos de texto de una oferta son cadenas: una columna nula o
+      purgada se devuelve como cadena vacía, nunca como `null` (ALT-006).
+    - `sector` se devuelve siempre vacío, porque la ficha del portal no lo
+      publica y no hay otra fuente en el alcance (DEC-009).
+    - `estado` solo puede ser `vigente` o `cerrada` en el resultado: las
+      ofertas `sin_ficha` nunca se muestran, ni siquiera con
+      `incluir_cerradas` (REQ-006, SUP-003).
+
+    Filtros y comportamiento:
+    - Todos los filtros se combinan con AND. Un filtro ausente o vacío se
+      interpreta como "sin filtro" (REQ-001).
+    - Por defecto solo se ven las ofertas `vigente`. Con
+      `incluir_cerradas=true` se ven también las `cerrada` (REQ-006).
+    - El filtro `sector` existe y se aplica, pero hoy el campo se almacena
+      siempre vacío, así que cualquier valor de `sector` devuelve un resultado
+      vacío con `total` 0 y sin error (REQ-003, SUP-001, ALT-007).
+    - No existe filtro por `oficina`: el campo no está en el esquema de
+      `api-persistencia` (SUP-002).
+    - La búsqueda por texto libre coincide por contención sobre `ocupacion`,
+      `municipio` y `texto_libre`, sin distinguir mayúsculas ni tildes
+      (REQ-002, NFR-003). El filtro por `municipio` coincide por igualdad de
+      cadenas normalizadas (REQ-004).
+    - Con filtro textual o de municipio, SQL aplica solo los filtros no
+      textuales (estado, sector y rango de fechas), recupera las filas
+      candidatas ya ordenadas, filtra en memoria y solo después calcula el
+      `total` y recorta la página. El `total` es por tanto el del conjunto ya
+      filtrado (DEC-002).
+    - El rango de fechas es inclusivo por los dos extremos y se aplica sobre
+      `fecha_inicio_difusion` (REQ-005, SUP-004). Las ofertas sin fecha de
+      inicio válida quedan fuera de los filtros de rango y siempre al final
+      del orden (ALT-004, DEC-003).
+    - El orden es por fecha de inicio de difusión descendente, con desempate
+      por `codigo` ascendente (REQ-007).
+    - El tamaño de página se recorta al máximo configurado
+      (`tamano_pagina_maximo`, 100 por defecto) cuando lo supera; un tamaño
+      menor o igual que cero y un `offset` negativo se rechazan con `400`
+      (NFR-001, DEC-004). Un `offset` válido mayor o igual que el `total`
+      devuelve una página vacía con el `total` real y sin error (REQ-007,
+      ALT-003).
+
+    Convive en el mismo proceso con los endpoints del buscador
+    (`api-buscador.yaml`), de persistencia (`api-persistencia.yaml`), del
+    histórico (`api-historico.yaml`), de la integridad (`api-integridad.yaml`)
+    y del parseo de PDF (`api-pdf-parser.yaml`).
+paths:
+  /listado:
+    get:
+      operationId: consultarListado
+      summary: Consultar el listado filtrado y paginado de ofertas
+      description: >-
+        Devuelve una página de las ofertas que cumplen **todos** los filtros
+        aplicados, con los metadatos de paginación y los filtros aplicados
+        (REQ-001, REQ-007, REQ-008).
+
+        Los parámetros se validan **antes** de tocar la base de datos: una
+        fecha que no cumple `dd/mm/aaaa`, un rango invertido, un `offset`
+        negativo o un tamaño de página no positivo se rechazan con `400` sin
+        llegar al SQLite (REQ-009, ALT-002).
+
+        Por defecto solo se devuelven las ofertas `vigente`; con
+        `incluir_cerradas=true` se añaden las `cerrada`. Las ofertas
+        `sin_ficha` nunca se muestran (REQ-006, SUP-003).
+
+        Un filtro sin coincidencias devuelve `200` con `items` vacío y `total`
+        0, sin error (REQ-009). Un `offset` mayor o igual que el `total`
+        devuelve `200` con `items` vacío y el `total` real, sin error
+        (REQ-007, ALT-003).
+
+        La lectura es de solo lectura sobre el SQLite de `api-persistencia`
+        (`mode=ro`): la consulta no modifica la base de datos ni su marca de
+        modificación (REQ-010, DEC-001).
+      tags:
+        - listado
+      parameters:
+        - name: texto
+          in: query
+          required: false
+          description: >-
+            Término de búsqueda libre. Coincide por contención sobre
+            `ocupacion`, `municipio` y `texto_libre`, sin distinguir
+            mayúsculas ni tildes (REQ-002, NFR-003). Si se indica, la
+            comparación se hace en memoria y el `total` refleja el conjunto ya
+            filtrado (DEC-002).
+          schema:
+            type: string
+          example: tecnico
+        - name: sector
+          in: query
+          required: false
+          description: >-
+            Sector de la oferta, por igualdad exacta. El filtro **existe**
+            aunque hoy el campo se almacene siempre vacío (DEC-009): con
+            cualquier valor de `sector` el resultado es una lista vacía con
+            `total` 0 y sin error (REQ-003, SUP-001, ALT-007).
+          schema:
+            type: string
+          example: Informática
+        - name: municipio
+          in: query
+          required: false
+          description: >-
+            Municipio de la oferta, por igualdad de cadenas normalizadas: no
+            distingue mayúsculas ni tildes (REQ-004). Si se indica, la
+            comparación se hace en memoria (DEC-002).
+          schema:
+            type: string
+          example: Santander
+        - name: fecha_desde
+          in: query
+          required: false
+          description: >-
+            Cota inferior del rango de fechas de inicio de difusión, en
+            formato `dd/mm/aaaa`. El rango es inclusivo: se incluyen las
+            ofertas cuya fecha de inicio es igual o posterior a este valor
+            (REQ-005).
+          schema:
+            type: string
+            pattern: '^\d{2}/\d{2}/\d{4}$'
+          example: '10/11/2026'
+        - name: fecha_hasta
+          in: query
+          required: false
+          description: >-
+            Cota superior del rango de fechas de inicio de difusión, en
+            formato `dd/mm/aaaa`. El rango es inclusivo: se incluyen las
+            ofertas cuya fecha de inicio es igual o anterior a este valor
+            (REQ-005). No puede ser anterior a `fecha_desde`.
+          schema:
+            type: string
+            pattern: '^\d{2}/\d{2}/\d{4}$'
+          example: '20/11/2026'
+        - name: incluir_cerradas
+          in: query
+          required: false
+          description: >-
+            Si es `true`, incluye también las ofertas en estado `cerrada`
+            además de las `vigente`. Por defecto es `false`: solo se muestran
+            las `vigente`. Las ofertas `sin_ficha` nunca se muestran
+            (REQ-006, SUP-003).
+          schema:
+            type: boolean
+            default: false
+          example: true
+        - name: offset
+          in: query
+          required: false
+          description: >-
+            Número de ofertas omitidas desde el principio del conjunto
+            filtrado. No puede ser negativo (REQ-009, ALT-002). Un valor
+            mayor o igual que el `total` no es error: devuelve una página
+            vacía con el `total` real (ALT-003).
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          example: 20
+        - name: tamano_pagina
+          in: query
+          required: false
+          description: >-
+            Número de ofertas por página. Si se omite, se aplica el tamaño
+            por defecto de la configuración (`tamano_pagina_por_defecto`, 20
+            por defecto). Si supera el máximo configurado
+            (`tamano_pagina_maximo`, 100 por defecto), **se recorta** a ese
+            máximo y la respuesta lo refleja en `tamano_pagina` (NFR-001,
+            DEC-004). Un valor menor o igual que cero se rechaza con `400`.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+          example: 20
+      responses:
+        '200':
+          description: >-
+            Página del listado con la lista de ofertas y los metadatos de
+            paginación y filtros aplicados. `items` puede estar vacía si
+            ningún registro cumple los filtros (REQ-009) o si el `offset`
+            supera el `total` (ALT-003).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespuestaListado'
+              examples:
+                conOfertas:
+                  summary: Página con ofertas vigentes y sus metadatos
+                  value:
+                    items:
+                      - comunidad: Cantabria
+                        codigo: '061234567890'
+                        ocupacion: Programador
+                        municipio: Santander
+                        provincia: Cantabria
+                        sector: ''
+                        fecha_inicio_difusion: '30/11/2026'
+                        fecha_fin_difusion: '31/12/2026'
+                        estado: vigente
+                        contacto: rrhh@test.com
+                        texto_libre: Buscamos desarrollador Python
+                      - comunidad: Cantabria
+                        codigo: '061234567891'
+                        ocupacion: Técnico de sistemas
+                        municipio: SANTANDER
+                        provincia: Cantabria
+                        sector: ''
+                        fecha_inicio_difusion: '20/11/2026'
+                        fecha_fin_difusion: '31/12/2026'
+                        estado: vigente
+                        contacto: tec@test.com
+                        texto_libre: Soporte técnico
+                    total: 2
+                    pagina: 1
+                    tamano_pagina: 20
+                    filtros_aplicados: {}
+                conFiltros:
+                  summary: Página con filtros aplicados y total filtrado
+                  value:
+                    items:
+                      - comunidad: Cantabria
+                        codigo: '061234567890'
+                        ocupacion: Programador
+                        municipio: Santander
+                        provincia: Cantabria
+                        sector: ''
+                        fecha_inicio_difusion: '30/11/2026'
+                        fecha_fin_difusion: '31/12/2026'
+                        estado: vigente
+                        contacto: rrhh@test.com
+                        texto_libre: Buscamos desarrollador Python
+                    total: 1
+                    pagina: 1
+                    tamano_pagina: 20
+                    filtros_aplicados:
+                      texto: programador
+                      municipio: santander
+                      fecha_desde: '25/11/2026'
+                conCerradas:
+                  summary: Página con ofertas vigentes y cerradas
+                  value:
+                    items:
+                      - comunidad: Cantabria
+                        codigo: '061234567892'
+                        ocupacion: Administrativo
+                        municipio: Torrelavega
+                        provincia: Cantabria
+                        sector: ''
+                        fecha_inicio_difusion: '10/11/2026'
+                        fecha_fin_difusion: '31/12/2026'
+                        estado: cerrada
+                        contacto: ''
+                        texto_libre: ''
+                    total: 1
+                    pagina: 1
+                    tamano_pagina: 20
+                    filtros_aplicados:
+                      incluir_cerradas: true
+                sinCoincidencias:
+                  summary: Filtro sin coincidencias
+                  value:
+                    items: []
+                    total: 0
+                    pagina: 1
+                    tamano_pagina: 20
+                    filtros_aplicados:
+                      texto: astronauta
+                sectorSinDatos:
+                  summary: Filtro por sector, hoy sin datos que lo satisfagan
+                  value:
+                    items: []
+                    total: 0
+                    pagina: 1
+                    tamano_pagina: 20
+                    filtros_aplicados:
+                      sector: Informática
+                offsetFueraDeRango:
+                  summary: Desplazamiento mayor o igual que el total
+                  value:
+                    items: []
+                    total: 3
+                    pagina: 6
+                    tamano_pagina: 20
+                    filtros_aplicados: {}
+        '400':
+          description: >-
+            Algún parámetro no es válido. La petición se rechaza **antes** de
+            tocar la base de datos (REQ-009, ALT-002). El `detail` identifica
+            el parámetro que falla y, en el caso de las fechas, el formato
+            esperado `dd/mm/aaaa`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorHTTP'
+              examples:
+                fechaMalFormada:
+                  summary: Fecha de inicio mal formada
+                  value:
+                    detail: >-
+                      El parámetro 'fecha_desde' debe ser una fecha con formato
+                      dd/mm/aaaa; recibido: '32/13/2026'
+                fechaHastaMalFormada:
+                  summary: Fecha de fin mal formada
+                  value:
+                    detail: >-
+                      El parámetro 'fecha_hasta' debe ser una fecha con formato
+                      dd/mm/aaaa; recibido: '2026-11-10'
+                rangoInvertido:
+                  summary: Rango con `fecha_desde` posterior a `fecha_hasta`
+                  value:
+                    detail: >-
+                      El rango de fechas es inválido: 'desde' (21/11/2026) es
+                      posterior a 'hasta' (20/11/2026).
+                offsetNegativo:
+                  summary: Desplazamiento negativo
+                  value:
+                    detail: "El parámetro 'offset' no puede ser negativo."
+                tamanoNoPositivo:
+                  summary: Tamaño de página no positivo
+                  value:
+                    detail: >-
+                      El parámetro 'tamano_pagina' debe ser mayor que cero.
+        '503':
+          description: >-
+            No se puede acceder a los datos del listado, o el listado no está
+            disponible. La primera causa es que el SQLite de `api-persistencia`
+            no exista, no sea un fichero SQLite válido o no contenga la tabla
+            `ofertas` (REQ-009, ALT-001); la segunda es que la aplicación
+            arrancara sin la configuración del listado o sin inicializar su
+            repositorio. En ambos casos el fichero de base de datos no se
+            crea ni se modifica.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorHTTP'
+              examples:
+                datosInaccesibles:
+                  summary: Base de datos inaccesible
+                  value:
+                    detail: No se puede acceder a los datos del listado.
+                listadoNoDisponible:
+                  summary: Listado no inicializado
+                  value:
+                    detail: >-
+                      El listado no está disponible. Comprueba la
+                      configuración.
+  /listado/filtros:
+    get:
+      operationId: consultarFiltrosListado
+      summary: Consultar los filtros soportados por el listado
+      description: >-
+        Devuelve los **seis** filtros que admite `GET /listado` —`texto`,
+        `sector`, `municipio`, `fecha_desde`, `fecha_hasta` e
+        `incluir_cerradas`— con su tipo, su formato y un ejemplo de valor
+        (REQ-003, DEC-005).
+
+        La respuesta es **estática**: no consulta la base de datos ni depende de
+        la configuración, de modo que responde `200` incluso si el SQLite de
+        `api-persistencia` no existe (REQ-010).
+
+        `sector` figura como filtro soportado aunque hoy no haya ofertas con
+        ese valor, porque el campo se almacena siempre vacío (REQ-003,
+        SUP-001, ALT-007). **No** se anuncia ningún filtro por `oficina`: el
+        campo no existe en el esquema de `api-persistencia` (SUP-002).
+      tags:
+        - listado
+      responses:
+        '200':
+          description: >-
+            Lista de los filtros soportados, con su tipo, su formato y su
+            ejemplo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespuestaFiltrosDisponibles'
+              examples:
+                filtros:
+                  summary: Los seis filtros soportados por el listado
+                  value:
+                    filtros:
+                      - nombre: texto
+                        tipo: texto
+                        formato: texto libre
+                        ejemplo: tecnico
+                      - nombre: sector
+                        tipo: texto
+                        formato: texto (igualdad exacta)
+                        ejemplo: Informática
+                      - nombre: municipio
+                        tipo: texto
+                        formato: texto (igualdad, sin distinguir mayúsculas ni tildes)
+                        ejemplo: Santander
+                      - nombre: fecha_desde
+                        tipo: fecha
+                        formato: dd/mm/aaaa
+                        ejemplo: '10/11/2026'
+                      - nombre: fecha_hasta
+                        tipo: fecha
+                        formato: dd/mm/aaaa
+                        ejemplo: '20/11/2026'
+                      - nombre: incluir_cerradas
+                        tipo: booleano
+                        formato: 'true | false'
+                        ejemplo: 'true'
+components:
+  schemas:
+    OfertaListado:
+      type: object
+      description: >-
+        Oferta del listado con los once campos exigidos por REQ-008. Todos
+        los campos de texto son cadenas: una columna nula o purgada se
+        devuelve como cadena vacía, nunca como `null` (ALT-006).
+      required:
+        - comunidad
+        - codigo
+        - ocupacion
+        - municipio
+        - provincia
+        - sector
+        - fecha_inicio_difusion
+        - fecha_fin_difusion
+        - estado
+        - contacto
+        - texto_libre
+      properties:
+        comunidad:
+          type: string
+          description: Comunidad autónoma de la oferta.
+          example: Cantabria
+        codigo:
+          type: string
+          description: >-
+            Código de la oferta, texto de 12 dígitos conservado con sus ceros
+            por delante, nunca un número.
+          pattern: '^[0-9]{12}$'
+          example: '061234567890'
+        ocupacion:
+          type: string
+          description: >-
+            Denominación del puesto publicada por la ficha. Vacía si no se
+            conoce.
+          example: Programador
+        municipio:
+          type: string
+          description: >-
+            Municipio de la oferta, tal como lo guarda `api-persistencia`
+            (puede venir en mayúsculas). Vacío si no se conoce.
+          example: Santander
+        provincia:
+          type: string
+          description: Provincia de la oferta. Vacía si no se conoce.
+          example: Cantabria
+        sector:
+          type: string
+          default: ''
+          description: >-
+            Sector profesional. Se devuelve siempre vacío porque la ficha del
+            portal no lo publica y no hay otra fuente en el alcance (DEC-009).
+          example: ''
+        fecha_inicio_difusion:
+          type: string
+          description: >-
+            Fecha de inicio de difusión en formato `dd/mm/aaaa` (SUP-003,
+            DEC-003). Vacía si la oferta no la tiene informada; en ese caso la
+            oferta queda fuera de los filtros de rango y al final del orden
+            (ALT-004).
+          pattern: '^(\d{2}/\d{2}/\d{4})?$'
+          example: '30/11/2026'
+        fecha_fin_difusion:
+          type: string
+          description: >-
+            Fecha de fin de difusión en formato `dd/mm/aaaa` (SUP-003). Vacía
+            si la oferta no la tiene informada.
+          pattern: '^(\d{2}/\d{2}/\d{4})?$'
+          example: '31/12/2026'
+        estado:
+          type: string
+          description: >-
+            Estado de la oferta. En el listado solo puede ser `vigente` o
+            `cerrada`: las ofertas `sin_ficha` nunca se muestran, ni siquiera
+            con `incluir_cerradas` (REQ-006, SUP-003).
+          enum:
+            - vigente
+            - cerrada
+          example: vigente
+        contacto:
+          type: string
+          description: >-
+            Información de contacto publicada por la ficha. Queda vacía tras
+            la purga por retención (ALT-006).
+          example: rrhh@test.com
+        texto_libre:
+          type: string
+          description: >-
+            Texto libre de la oferta. Queda vacío tras la purga por
+            retención (ALT-006).
+          example: Buscamos desarrollador Python
+    RespuestaListado:
+      type: object
+      description: >-
+        Página del listado con sus metadatos de paginación y los filtros
+        aplicados (REQ-007, REQ-008).
+      required:
+        - items
+        - total
+        - pagina
+        - tamano_pagina
+        - filtros_aplicados
+      properties:
+        items:
+          type: array
+          description: >-
+            Ofertas de la página solicitada, ya ordenadas por fecha de inicio
+            de difusión descendente y, a igualdad de fecha, por código
+            ascendente (REQ-007). Puede estar vacía si ningún registro
+            cumple los filtros o si el `offset` supera el `total` (REQ-009,
+            ALT-003).
+          items:
+            $ref: '#/components/schemas/OfertaListado'
+        total:
+          type: integer
+          minimum: 0
+          description: >-
+            Número de ofertas que cumplen los filtros. Con filtro textual o de
+            municipio, es el número de ofertas **después** del filtrado en
+            memoria, no el recuento previo de SQL (DEC-002).
+          example: 2
+        pagina:
+          type: integer
+          minimum: 1
+          description: >-
+            Página actual, empezando en 1. Es el cociente entero de
+            `offset` entre `tamano_pagina` más uno.
+          example: 1
+        tamano_pagina:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: >-
+            Tamaño de página aplicado. Refleja el recorte al máximo
+            configurado cuando el valor solicitado lo superaba (NFR-001,
+            DEC-004).
+          example: 20
+        filtros_aplicados:
+          type: object
+          description: >-
+            Filtros recibidos que han restringido la consulta (REQ-008).
+            Solo aparecen los filtros con valor: los de texto y fecha con su
+            valor recortado de espacios, e `incluir_cerradas` con `true` si
+            se pidió. Sin filtros activos es un objeto vacío.
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: boolean
+          example:
+            texto: programador
+            municipio: santander
+            fecha_desde: '25/11/2026'
+    FiltroDisponible:
+      type: object
+      description: >-
+        Un filtro que admite `GET /listado`, con los metadatos de su uso
+        (DEC-005).
+      required:
+        - nombre
+        - tipo
+        - formato
+        - ejemplo
+      properties:
+        nombre:
+          type: string
+          description: >-
+            Nombre del parámetro de consulta. Coincide con el nombre del
+            parámetro de `GET /listado`.
+          example: fecha_desde
+        tipo:
+          type: string
+          description: Tipo de valor que admite el filtro.
+          enum:
+            - texto
+            - fecha
+            - booleano
+          example: fecha
+        formato:
+          type: string
+          description: Formato esperado del valor del filtro.
+          example: dd/mm/aaaa
+        ejemplo:
+          type: string
+          description: Valor de ejemplo del filtro.
+          example: '10/11/2026'
+    RespuestaFiltrosDisponibles:
+      type: object
+      description: Filtros soportados por `GET /listado` (REQ-003, DEC-005).
+      required:
+        - filtros
+      properties:
+        filtros:
+          type: array
+          description: >-
+            Los seis filtros soportados, en el orden `texto`, `sector`,
+            `municipio`, `fecha_desde`, `fecha_hasta` e `incluir_cerradas`.
+            `sector` figura aunque hoy no haya ofertas con ese valor
+            (REQ-003, SUP-001). No se anuncia ningún filtro por `oficina`
+            (SUP-002).
+          items:
+            $ref: '#/components/schemas/FiltroDisponible'
+    ErrorHTTP:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+          description: Descripción del error de la API.
+          example: >-
+            El parámetro 'fecha_desde' debe ser una fecha con formato
+            dd/mm/aaaa; recibido: '32/13/2026'

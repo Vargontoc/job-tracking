@@ -46,7 +46,7 @@
 - [X] **api-persistencia** — esquema SQLite: ofertas con comunidad y provincia, estado, fechas de difusión, texto, contacto, `embedding` (BLOB + modelo y versión) y registro mínimo tras la purga. Cubre la base de **FUN-003**, **FUN-006** y **FUN-011**.
 - [X] **api-historico** — altas y cierres por fecha de fin de difusión, con la desaparición del listado como respaldo; margen ante fallos y sin marcar cierres si la descarga falla. Cubre **FUN-003**.
 - [X] **api-integridad** — descarga diaria del PDF, conservación del último mes, comparación de recuento con el buscador y bloqueo de cierres cuando divergen. Completa **FUN-014**.
-- [ ] **api-listado** — listado filtrable por texto libre, sector, municipio, oficina y fecha, con las descartadas y cerradas fuera por defecto. Cubre **FUN-002** y **FUN-007**.
+- [X] **api-listado** — listado filtrable por texto libre, sector, municipio, oficina y fecha, con las descartadas y cerradas fuera por defecto. Cubre **FUN-002** y **FUN-007**.
 - [ ] **api-perfil** — perfil versionado con campos estructurados y criterios en lenguaje natural; varias provincias en el modelo. Cubre **FUN-012**.
 - [ ] **api-encaje** — puntuación contra el perfil con Ollama, motivo en dos líneas, resultado cacheado por oferta y versión de perfil, recálculo al cambiar el perfil, y generación del embedding al entrar la oferta. Cubre **FUN-010** y deja listo el índice de **FUN-011**.
 - [ ] **api-digest** — digest diario por Telegram a las 09:00, configurable, solo con las ofertas que superan el umbral (7/10 por defecto). Cubre **FUN-004**.

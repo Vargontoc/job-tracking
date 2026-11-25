@@ -80,6 +80,15 @@ from source.api.integridad.purger import purgar
 from source.api.integridad.routes import router as integridad_router
 from source.api.integridad.task import TareaIntegridad
 
+# Listado (TASK-010)
+from source.api.listado.config import (
+    cargar_configuracion as cargar_configuracion_listado,
+    ErrorConfiguracion as ErrorConfiguracionListado,
+)
+from source.api.listado.read_adapter import AdaptadorLecturaListado
+from source.api.listado.repository import RepositorioListado
+from source.api.listado.routes import router as listado_router
+
 logger = logging.getLogger(__name__)
 
 
@@ -418,6 +427,51 @@ async def lifespan(app: FastAPI):
         )
         app_state["tarea_integridad"] = None
 
+    # Parte 5: Listado (TASK-010) — independiente del resto. No abre recursos
+    # de vida larga ni arranca tareas: cada consulta abre y cierra su conexión
+    # mode=ro (DEC-001), así que no interviene en el apagado.
+    try:
+        # 8.1 Cargar configuración del listado
+        config_listado = cargar_configuracion_listado()
+        logger.info(
+            "Configuración del listado cargada: ruta_bd=%s, página=%d, máximo=%d",
+            config_listado.ruta_bd,
+            config_listado.tamano_pagina_por_defecto,
+            config_listado.tamano_pagina_maximo,
+        )
+
+        # 8.2 Adaptador de lectura y repositorio de consulta
+        adaptador_listado = AdaptadorLecturaListado(
+            ruta_bd=config_listado.ruta_bd
+        )
+        repositorio_listado = RepositorioListado(adaptador=adaptador_listado)
+
+        # 8.3 Guardar referencias en app_state (claves que usa listado/routes.py)
+        app_state["config_listado"] = config_listado
+        app_state["adaptador_listado"] = adaptador_listado
+        app_state["repositorio_listado"] = repositorio_listado
+
+        logger.info("Listado inicializado correctamente")
+
+    except ErrorConfiguracionListado as exc:
+        logger.error(
+            "Error de configuración del listado: %s. "
+            "La app continúa sin el listado.",
+            exc,
+        )
+        app_state["config_listado"] = None
+        app_state["adaptador_listado"] = None
+        app_state["repositorio_listado"] = None
+    except Exception as exc:
+        logger.error(
+            "Error inesperado al inicializar el listado: %s. "
+            "La app continúa sin el listado.",
+            exc,
+        )
+        app_state["config_listado"] = None
+        app_state["adaptador_listado"] = None
+        app_state["repositorio_listado"] = None
+
     yield
     
     # === SHUTDOWN ===
@@ -507,6 +561,9 @@ app.include_router(historico_router)
 
 # Registrar rutas de la integridad (TASK-014)
 app.include_router(integridad_router)
+
+# Registrar rutas del listado (TASK-010)
+app.include_router(listado_router)
 
 
 @app.get("/health")

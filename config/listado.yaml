@@ -1,0 +1,43 @@
+# Contrato de configuración: listado filtrable de ofertas.
+#
+# Formato:
+# - La raíz debe ser un mapa YAML. Un YAML malformado, vacío o cuya raíz no
+#   sea un mapa se rechaza con un error controlado.
+# - Si el fichero no existe, la carga devuelve los valores por defecto.
+# - No hay submapas: todos los campos son de nivel superior y opcionales, y
+#   los que faltan toman su valor por defecto.
+# - Un campo con un tipo incorrecto se rechaza con un error controlado que
+#   identifica el campo. Los campos enteros no admiten booleanos: `true` y
+#   `false` no son enteros válidos.
+# - Los campos `tamano_pagina_por_defecto` y `tamano_pagina_maximo` deben
+#   ser enteros positivos: un valor cero o negativo se rechaza con un error
+#   controlado que identifica el campo.
+#
+# Campos de nivel superior:
+#   ruta_bd: ruta al fichero SQLite de api-persistencia que el listado leerá
+#     en modo **solo lectura (`mode=ro`)** (DEC-001). Relativa a la raíz del
+#     proyecto. El listado no la crea ni la modifica: si el fichero no
+#     existe, no es un SQLite válido o no contiene la tabla `ofertas`, los
+#     endpoints devuelven un error controlado sin tocar el sistema de
+#     ficheros. Por defecto: "data/job_emcan.db".
+#   tamano_pagina_por_defecto: número de ofertas por página cuando el
+#     cliente no indica `tamano_pagina` (entero > 0). Por defecto: 20.
+#   tamano_pagina_maximo: tamaño máximo de página. Un `tamano_pagina`
+#     superior se recorta a este valor y la respuesta lo refleja en
+#     `tamano_pagina` (NFR-001, DEC-004). Entero > 0. Por defecto: 100.
+#
+# Valores por defecto (si el campo falta):
+#   ruta_bd = "data/job_emcan.db", tamano_pagina_por_defecto = 20,
+#   tamano_pagina_maximo = 100.
+#
+# Esta configuración NO contiene rutas de servidor de base de datos ni
+# credenciales. SQLite es un fichero local único; el listado solo lo abre
+# para leer.
+#
+# Consumidores: `source/api/listado/config.py` carga este fichero y
+# `source/api/main.py` aplica sus valores al arrancar la aplicación (ruta de
+# la base de datos, tamaño de página por defecto y tamaño máximo de página).
+
+ruta_bd: "data/job_emcan.db"
+tamano_pagina_por_defecto: 20
+tamano_pagina_maximo: 100
